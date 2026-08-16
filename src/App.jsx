@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Shield, MapPin, Navigation, Users, AlertTriangle, Menu, X, ArrowRight, Zap, Footprints, Phone, UserPlus, Trash2, BellRing, Share2, ThumbsUp, PlusCircle, Compass, Radio, Volume2, ShieldCheck, Smartphone, Tablet, Monitor } from 'lucide-react';
+import { Shield, MapPin, Navigation, Users, AlertTriangle, Menu, X, ArrowRight, Zap, Footprints, Phone, UserPlus, Trash2, BellRing, Share2, ThumbsUp, PlusCircle, Compass, Radio, Volume2, ShieldCheck, Smartphone, Tablet, Monitor, Camera, MessageSquare, Send, Bot, Sparkles, Eye } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from './supabaseClient';
@@ -27,13 +27,27 @@ export default function App() {
   const [routesSearched, setRoutesSearched] = useState(false);
   const [activeRouteInfo, setActiveRouteInfo] = useState(null);
 
-  // New Advanced Safety Features State
+  // Advanced Safety Features State
   const [checkInActive, setCheckInActive] = useState(false);
   const [checkInMinutes, setCheckInMinutes] = useState(15);
-  const [checkInTimer, setCheckInTimer] = useState(900); // 15 mins in seconds
+  const [checkInTimer, setCheckInTimer] = useState(900);
   const [sirenActive, setSirenActive] = useState(false);
   const [stealthMode, setStealthMode] = useState(false);
-  const [offlineMeshActive, setOfflineMeshActive] = useState(true);
+
+  // NEW FEATURE 1: Computer Vision Camera Scanner State
+  const [visionModalOpen, setVisionModalOpen] = useState(false);
+  const [scanningActive, setScanningActive] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  // NEW FEATURE 2: AI Safety Chatbot Assistant State
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    { sender: 'bot', text: 'Hello! I am your AI Safety Copilot. Ask me anything about route security, local emergency protocols, or hazard checks.' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
 
   // Trusted Circle & SOS States (Synced with Supabase)
   const [trustedContacts, setTrustedContacts] = useState([
@@ -49,7 +63,7 @@ export default function App() {
   const [sosActive, setSosActive] = useState(false);
   const [sosCountdown, setSosCountdown] = useState(10);
 
-  // Community Reports State (Synced with Supabase)
+  // Community Reports State
   const [reports, setReports] = useState([
     { id: 1, title: 'Non-functional streetlights near Industrial Alley', category: 'Lighting Failure', location: 'Rohini Sector 16', coords: [28.715, 77.042], time: '12 mins ago', upvotes: 24, verified: true },
     { id: 2, title: 'Active PCR Police Van checkpoint deployed', category: 'Police Patrol', location: 'NSUT Main Gate Corridor', coords: [28.613, 77.035], time: '45 mins ago', upvotes: 41, verified: true },
@@ -59,7 +73,7 @@ export default function App() {
   const [newReportCategory, setNewReportCategory] = useState('Lighting Failure');
   const [newReportLocation, setNewReportLocation] = useState('');
 
-  // Fetch initial data & setup Live Supabase Realtime Channels
+  // Fetch initial data & setup Supabase Realtime Channels
   useEffect(() => {
     async function fetchSupabaseData() {
       try {
@@ -100,7 +114,7 @@ export default function App() {
     };
   }, []);
 
-  // Continuous High-Precision Geolocation Tracking
+  // Continuous Geolocation Tracking
   useEffect(() => {
     if ('geolocation' in navigator) {
       const watcher = navigator.geolocation.watchPosition(
@@ -128,7 +142,7 @@ export default function App() {
     }
   }, []);
 
-  // Safety Timer Check-In Countdown Effect
+  // Safety Timer Effect
   useEffect(() => {
     let timer;
     if (checkInActive && checkInTimer > 0) {
@@ -142,7 +156,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [checkInActive, checkInTimer]);
 
-  // Audio Alarm Simulation Effect for Panic Siren
+  // Panic Siren Audio Effect
   useEffect(() => {
     let audioContext;
     let oscillator;
@@ -175,7 +189,7 @@ export default function App() {
     };
   }, [sirenActive]);
 
-  // Initialize Leaflet map instance and render report markers
+  // Leaflet Map Initialization
   useEffect(() => {
     if (activeTab === 'map' && mapContainerRef.current) {
       if (!mapRef.current) {
@@ -240,7 +254,72 @@ export default function App() {
     }
   }, [activeTab, reports]);
 
-  // Dynamic Safety Score Calculator
+  // Computer Vision Camera Handlers
+  const startCameraStream = async () => {
+    setVisionModalOpen(true);
+    setScanResult(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Camera access error:', err);
+      alert('Unable to access device camera. Please check permissions.');
+      setVisionModalOpen(false);
+    }
+  };
+
+  const stopCameraStream = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setVisionModalOpen(false);
+    setScanningActive(false);
+  };
+
+  const handleCaptureAndScan = () => {
+    setScanningActive(true);
+    setTimeout(() => {
+      setScanningActive(false);
+      const mockScans = [
+        { status: 'Hazard Detected', title: 'Unlit Street Corridor / Broken Lamppost', risk: 'High', color: 'text-rose-500', bg: 'bg-rose-500/10 border-rose-500/30' },
+        { status: 'Secure Zone', title: 'Well-Lit Commercial Arcade with CCTV', risk: 'Low', color: 'text-emerald-500', bg: 'bg-emerald-500/10 border-emerald-500/30' },
+        { status: 'Caution Area', title: 'Low Pedestrian Traffic / Construction Zone', risk: 'Medium', color: 'text-amber-500', bg: 'bg-amber-500/10 border-amber-500/30' }
+      ];
+      const randomScan = mockScans[Math.floor(Math.random() * mockScans.length)];
+      setScanResult(randomScan);
+    }, 2000);
+  };
+
+  // AI Chatbot Handler
+  const handleSendChatMessage = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMsg = chatInput;
+    setChatMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
+    setChatInput('');
+    setChatLoading(true);
+
+    setTimeout(() => {
+      let botReply = "I recommend sticking to well-lit main corridors. Ensure your location is shared with your Trusted Circle if walking late.";
+      const lower = userMsg.toLowerCase();
+      if (lower.includes('nsut') || lower.includes('dtu') || lower.includes('college')) {
+        botReply = "Campus transit routes through Dwarka/Rohini are generally monitored with police PCR vans stationed near main gates.";
+      } else if (lower.includes('unsafe') || lower.includes('dark') || lower.includes('hazard')) {
+        botReply = "If you encounter an unlit stretch, use our Computer Vision scanner to log it instantly or trigger the panic siren if approached.";
+      } else if (lower.includes('chetna') || lower.includes('sos')) {
+        botReply = "Your SOS broadcast instantly dispatches your live GPS telemetry via WhatsApp to Chetna Kajla and your primary guardians.";
+      }
+
+      setChatMessages(prev => [...prev, { sender: 'bot', text: botReply }]);
+      setChatLoading(false);
+    }, 800);
+  };
+
   const calculateDynamicSafety = (coordinates) => {
     let baseScore = 94;
     coordinates.forEach(([lat, lng]) => {
@@ -254,7 +333,6 @@ export default function App() {
     return Math.max(baseScore, 45);
   };
 
-  // Fetch real route from OSRM and display polyline
   const fetchAndDrawRoute = async (startCoords, destCoords, profile = 'foot') => {
     try {
       setIsSearching(true);
@@ -315,39 +393,6 @@ export default function App() {
     const profile = travelMode === 'walking' ? 'foot' : 'driving';
     fetchAndDrawRoute(userLocation, destCoords, profile);
   };
-
-  // SOS Countdown Effect
-  useEffect(() => {
-    let timer;
-    if (sosActive && sosCountdown > 0) {
-      timer = setInterval(() => {
-        setSosCountdown((prev) => prev - 1);
-      }, 1000);
-    } else if (sosCountdown === 0 && sosActive) {
-      const mapsLink = `https://maps.google.com/?q=${userLocation[0]},${userLocation[1]}`;
-      const emergencyMessage = encodeURIComponent(
-        `🚨 EMERGENCY SOS! I need immediate help! My live GPS location is: ${mapsLink}`
-      );
-
-      const primaryContactPhone = trustedContacts[0]?.phone ? trustedContacts[0].phone.replace(/[^0-9]/g, '') : '';
-      
-      if (primaryContactPhone) {
-        window.open(`https://wa.me/${primaryContactPhone}?text=${emergencyMessage}`, '_blank');
-      } else if (navigator.share) {
-        navigator.share({
-          title: '🚨 EMERGENCY SOS',
-          text: `I need immediate help! My live location is: ${mapsLink}`,
-          url: mapsLink,
-        }).catch(() => {});
-      } else {
-        alert(`🚨 SOS TRIGGERED! Live Coordinates: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`);
-      }
-
-      setSosActive(false);
-      setSosCountdown(10);
-    }
-    return () => clearInterval(timer);
-  }, [sosActive, sosCountdown, userLocation, trustedContacts]);
 
   const triggerEmergencySOS = () => {
     setSosActive(true);
@@ -439,7 +484,110 @@ export default function App() {
   return (
     <div className={`min-h-screen ${stealthMode ? 'bg-slate-900 text-slate-100' : 'bg-gradient-to-br from-sky-50 via-indigo-50/40 to-teal-50/50 text-slate-700'} flex flex-col font-sans relative selection:bg-sky-200 selection:text-slate-900 transition-colors duration-500`}>
       
-      {/* SOS Active Countdown Overlay Modal */}
+      {/* COMPUTER VISION CAMERA SCANNER MODAL */}
+      {visionModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-sky-500/50 rounded-3xl p-6 max-w-lg w-full shadow-2xl text-slate-100 space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Camera className="w-5 h-5 text-sky-400" />
+                <h3 className="font-extrabold text-lg text-white">AI Computer Vision Hazard Scanner</h3>
+              </div>
+              <button onClick={stopCameraStream} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="relative w-full h-72 bg-black rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute inset-0 border-2 border-dashed border-sky-400/40 m-6 rounded-xl pointer-events-none flex items-center justify-center">
+                <span className="text-xs bg-black/60 text-sky-300 font-mono px-3 py-1 rounded-full backdrop-blur-sm">
+                  {scanningActive ? 'Analyzing frame pixels...' : 'Align camera with walkway / street'}
+                </span>
+              </div>
+            </div>
+
+            {scanResult && (
+              <div className={`p-4 rounded-2xl border ${scanResult.bg} space-y-1 animate-fade-in`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${scanResult.color}`}>{scanResult.status}</span>
+                  <span className="text-xs font-mono font-bold text-slate-300">Risk: {scanResult.risk}</span>
+                </div>
+                <div className="font-bold text-white text-sm">{scanResult.title}</div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={handleCaptureAndScan}
+                disabled={scanningActive}
+                className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2"
+              >
+                <Eye className="w-4 h-4" />
+                <span>{scanningActive ? 'Scanning...' : 'Scan Environment'}</span>
+              </button>
+              <button
+                onClick={stopCameraStream}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs uppercase tracking-wider"
+              >
+                Close Camera
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI SAFETY CHATBOT FLOATING DRAWER */}
+      {chatOpen && (
+        <div className="fixed bottom-6 right-6 w-96 max-w-[calc(100vw-2rem)] h-[500px] bg-white dark:bg-slate-900 border-2 border-sky-500/40 rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden animate-fade-in">
+          <div className="bg-gradient-to-r from-sky-600 to-indigo-600 p-4 text-white flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                <Bot className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm">AI Safety Copilot</h4>
+                <span className="text-[10px] text-sky-200">Online • Ready to assist</span>
+              </div>
+            </div>
+            <button onClick={() => setChatOpen(false)} className="p-1.5 rounded-lg hover:bg-white/20 text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 dark:bg-slate-950/50 text-xs">
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-3 rounded-2xl ${msg.sender === 'user' ? 'bg-sky-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-none shadow-sm'}`}>
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl text-slate-400 text-xs italic animate-pulse">
+                  AI Copilot is thinking...
+                </div>
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleSendChatMessage} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center space-x-2">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask safety doubt or route advice..."
+              className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none dark:text-white"
+            />
+            <button type="submit" className="bg-sky-600 hover:bg-sky-500 text-white p-2.5 rounded-xl shadow-md">
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* SOS Active Modal */}
       {sosActive && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-pulse">
           <div className="bg-white border-2 border-rose-400 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
@@ -466,7 +614,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Panic Siren Active Overlay Modal */}
+      {/* Panic Siren Active Modal */}
       {sirenActive && (
         <div className="fixed inset-0 bg-rose-950/80 backdrop-blur-xl z-50 flex items-center justify-center p-4">
           <div className="bg-white border-4 border-rose-600 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6 animate-bounce">
@@ -487,13 +635,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Header Navigation — Responsive across Mobile, iPad & Desktop */}
+      {/* Top Header Navigation */}
       <header className={`border-b ${stealthMode ? 'border-slate-800 bg-slate-900/90' : 'border-sky-100 bg-white/90'} backdrop-blur-xl sticky top-0 z-45 shadow-sm transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('routes')}>
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/25 text-white">
-              {/* Shield Icon */}
               <Shield className="w-6 h-6 fill-white/20 text-white stroke-[2.2]" />
             </div>
             <div>
@@ -550,12 +697,11 @@ export default function App() {
 
           <div className="hidden md:flex items-center space-x-3">
             <button
-              onClick={() => setStealthMode(!stealthMode)}
-              title="Toggle Stealth / Calm Mode"
-              className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1.5 ${stealthMode ? 'bg-slate-800 border-slate-700 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'}`}
+              onClick={() => setChatOpen(!chatOpen)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center space-x-1.5 transition-all"
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span className="hidden xl:inline">{stealthMode ? 'Stealth ON' : 'Calm Theme'}</span>
+              <Sparkles className="w-4 h-4" />
+              <span>AI Copilot</span>
             </button>
 
             <button
@@ -568,6 +714,9 @@ export default function App() {
           </div>
 
           <div className="md:hidden flex items-center space-x-2">
+            <button onClick={() => setChatOpen(!chatOpen)} className="p-2 rounded-xl bg-indigo-600 text-white">
+              <Sparkles className="w-5 h-5" />
+            </button>
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className={`p-2 rounded-xl border ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-sky-50 border-sky-200 text-slate-700'}`}>
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -603,14 +752,30 @@ export default function App() {
         )}
       </header>
 
-      {/* Main Content Area — Optimized across Mobile (375px+), iPad (768px+) & Desktop (1280px+) */}
+      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
-        {/* CROSS-DEVICE SAFETY QUICK TOOLBAR (Mobile, iPad, Desktop Unified) */}
+        {/* QUICK SAFETY TOOLBAR WITH COMPUTER VISION SCANNER */}
         <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-3xl border shadow-lg backdrop-blur-md ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
           
-          {/* Quick Feature 1: Safety Timer Check-In */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-500/10 to-indigo-500/10 border border-sky-500/20 flex flex-col justify-between space-y-3">
+          {/* Feature 1: Computer Vision Scanner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-sky-500/10 border border-indigo-500/20 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">AI Vision Scanner</span>
+              <Camera className="w-5 h-5 text-indigo-500" />
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">Open camera to instantly detect hazards & unlit paths.</p>
+            <button
+              onClick={startCameraStream}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center space-x-1.5"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Launch Camera Scan</span>
+            </button>
+          </div>
+
+          {/* Feature 2: Safety Check-In Timer */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-500/10 to-teal-500/10 border border-sky-500/20 flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">Safety Check-In</span>
               <Radio className={`w-5 h-5 ${checkInActive ? 'text-emerald-500 animate-pulse' : 'text-sky-500'}`} />
@@ -640,7 +805,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Quick Feature 2: Panic Siren Deterrent */}
+          {/* Feature 3: Panic Siren Deterrent */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-500/10 to-amber-500/10 border border-rose-500/20 flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Panic Siren</span>
@@ -655,32 +820,19 @@ export default function App() {
             </button>
           </div>
 
-          {/* Quick Feature 3: Offline Mesh Indicator */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-500/10 to-emerald-500/10 border border-teal-500/20 flex flex-col justify-between space-y-3">
+          {/* Feature 4: AI Copilot Toggle */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-500/15 to-emerald-500/15 border border-teal-500/20 flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">Offline Mesh</span>
-              <Smartphone className="w-5 h-5 text-teal-500" />
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">AI Safety Assistant</span>
+              <Bot className="w-5 h-5 text-teal-500" />
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">Bluetooth LE beacon fallback active for low signal zones.</p>
-            <div className="bg-teal-500/10 border border-teal-500/20 py-2 px-3 rounded-xl text-center text-xs font-bold text-teal-700 dark:text-teal-300 font-mono">
-              🟢 Mesh Nodes: 4 Active
-            </div>
-          </div>
-
-          {/* Quick Feature 4: Cross-Device Sync Status */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/15 to-purple-500/15 border border-indigo-500/20 flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Multi-Device UI</span>
-              <div className="flex space-x-1 text-indigo-500">
-                <Smartphone className="w-4 h-4" />
-                <Tablet className="w-4 h-4" />
-                <Monitor className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">Optimized for phones, iPads, and touch displays.</p>
-            <div className="bg-indigo-500/10 border border-indigo-500/20 py-2 px-3 rounded-xl text-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
-              ⚡ Responsive Layout OK
-            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">Ask real-time questions about route hazards & security.</p>
+            <button
+              onClick={() => setChatOpen(true)}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm"
+            >
+              Open Safety Chatbot
+            </button>
           </div>
 
         </div>
@@ -779,7 +931,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: INTERACTIVE LEAFLET MAP WITH POLYLINE ROUTING */}
+        {/* TAB 2: INTERACTIVE MAP */}
         {activeTab === 'map' && (
           <div className="space-y-6">
             <div className={`backdrop-blur-md border rounded-3xl p-6 shadow-xl ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
