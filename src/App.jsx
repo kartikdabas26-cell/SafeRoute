@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Shield, MapPin, Navigation, Users, AlertTriangle, Menu, X, ArrowRight, Zap, Footprints, Phone, UserPlus, Trash2, BellRing, Share2, ThumbsUp, PlusCircle, Compass, Radio, Volume2, ShieldCheck, Smartphone, Tablet, Monitor, Camera, MessageSquare, Send, Bot, Sparkles, Eye } from 'lucide-react';
+import { Shield, MapPin, Navigation, Users, AlertTriangle, Menu, X, ArrowRight, Zap, Footprints, Phone, UserPlus, Trash2, BellRing, Share2, ThumbsUp, PlusCircle, Compass, Radio, Volume2, Camera, MessageSquare, Send, Bot, Sparkles, Eye } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from './supabaseClient';
@@ -34,14 +34,13 @@ export default function App() {
   const [sirenActive, setSirenActive] = useState(false);
   const [stealthMode, setStealthMode] = useState(false);
 
-  // NEW FEATURE 1: Computer Vision Camera Scanner State
+  // Computer Vision Camera Scanner State
   const [visionModalOpen, setVisionModalOpen] = useState(false);
   const [scanningActive, setScanningActive] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
 
-  // NEW FEATURE 2: AI Safety Chatbot Assistant State
+  // NEW FEATURE: AI Safety Chatbot Assistant State
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { sender: 'bot', text: 'Hello! I am your AI Safety Copilot. Ask me anything about route security, local emergency protocols, or hazard checks.' }
@@ -540,7 +539,7 @@ export default function App() {
       {/* AI SAFETY CHATBOT FLOATING DRAWER */}
       {chatOpen && (
         <div className="fixed bottom-6 right-6 w-96 max-w-[calc(100vw-2rem)] h-[500px] bg-white dark:bg-slate-900 border-2 border-sky-500/40 rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden animate-fade-in">
-          <div className="bg-gradient-to-r from-sky-600 to-indigo-600 p-4 text-white flex items-center justify-between">
+          <div className="bg-gradient-to-r from-sky-650 to-indigo-600 p-4 text-white flex items-center justify-between bg-sky-600">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
                 <Bot className="w-5 h-5 text-white" />
@@ -756,7 +755,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
         {/* QUICK SAFETY TOOLBAR WITH COMPUTER VISION SCANNER */}
-        <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-3xl border shadow-lg backdrop-blur-md ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-3xl border shadow-lg backdrop-blur-md ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
           
           {/* Feature 1: Computer Vision Scanner */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-sky-500/10 border border-indigo-500/20 flex flex-col justify-between space-y-3">
@@ -1114,7 +1113,7 @@ export default function App() {
                     </div>
                     <button
                       onClick={() => handleUpvote(report.id)}
-                      className={`border px-4 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}
+                      className={`border px-4 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'}`}
                     >
                       <ThumbsUp className="w-3.5 h-3.5 text-sky-500" />
                       <span>{report.upvotes} Upvotes</span>
