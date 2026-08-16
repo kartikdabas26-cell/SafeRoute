@@ -175,7 +175,6 @@ export default function App() {
           setLocationStatus('Live Vector GPS Locked');
           
           if (geofenceActive) {
-            // Simulated geofence boundary check
             if (latitude > 28.7) {
               setCurrentSafeHaven('DTU / Rohini Verified Secure Zone');
             } else {
