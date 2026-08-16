@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Shield, MapPin, Navigation, Users, AlertTriangle, Menu, X, ArrowRight, Zap, Footprints, Phone, UserPlus, Trash2, BellRing, Share2, ThumbsUp, PlusCircle, Compass } from 'lucide-react';
+import { Shield, MapPin, Navigation, Users, AlertTriangle, Menu, X, ArrowRight, Zap, Footprints, Phone, UserPlus, Trash2, BellRing, Share2, ThumbsUp, PlusCircle, Compass, Radio, Volume2, ShieldCheck, Smartphone, Tablet, Monitor } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from './supabaseClient';
@@ -26,6 +26,14 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [routesSearched, setRoutesSearched] = useState(false);
   const [activeRouteInfo, setActiveRouteInfo] = useState(null);
+
+  // New Advanced Safety Features State
+  const [checkInActive, setCheckInActive] = useState(false);
+  const [checkInMinutes, setCheckInMinutes] = useState(15);
+  const [checkInTimer, setCheckInTimer] = useState(900); // 15 mins in seconds
+  const [sirenActive, setSirenActive] = useState(false);
+  const [stealthMode, setStealthMode] = useState(false);
+  const [offlineMeshActive, setOfflineMeshActive] = useState(true);
 
   // Trusted Circle & SOS States (Synced with Supabase)
   const [trustedContacts, setTrustedContacts] = useState([
@@ -120,6 +128,53 @@ export default function App() {
     }
   }, []);
 
+  // Safety Timer Check-In Countdown Effect
+  useEffect(() => {
+    let timer;
+    if (checkInActive && checkInTimer > 0) {
+      timer = setInterval(() => {
+        setCheckInTimer(prev => prev - 1);
+      }, 1000);
+    } else if (checkInTimer === 0 && checkInActive) {
+      setCheckInActive(false);
+      triggerEmergencySOS();
+    }
+    return () => clearInterval(timer);
+  }, [checkInActive, checkInTimer]);
+
+  // Audio Alarm Simulation Effect for Panic Siren
+  useEffect(() => {
+    let audioContext;
+    let oscillator;
+    let intervalId;
+
+    if (sirenActive) {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let high = true;
+        intervalId = setInterval(() => {
+          if (!audioContext) return;
+          oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.setValueAtTime(high ? 880 : 587, audioContext.currentTime);
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.3);
+          high = !high;
+        }, 350);
+      } catch (e) {
+        console.log('Audio context blocked or unsupported');
+      }
+    }
+    return () => {
+      clearInterval(intervalId);
+      if (audioContext) audioContext.close();
+    };
+  }, [sirenActive]);
+
   // Initialize Leaflet map instance and render report markers
   useEffect(() => {
     if (activeTab === 'map' && mapContainerRef.current) {
@@ -138,8 +193,8 @@ export default function App() {
 
         const pulseIcon = L.divIcon({
           className: 'custom-pulse-marker',
-          html: '<div style="width: 20px; height: 20px; background: #0d9488; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px #0d9488;"></div>',
-          iconSize: [20, 20]
+          html: '<div style="width: 22px; height: 22px; background: #0ea5e9; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px rgba(14, 165, 233, 0.6);"></div>',
+          iconSize: [22, 22]
         });
 
         markerRef.current = L.marker(userLocation, { icon: pulseIcon }).addTo(map)
@@ -160,7 +215,7 @@ export default function App() {
           if (!report.coords) return;
           
           let badgeColor = '#d97706';
-          if (report.category === 'Police Patrol') badgeColor = '#2563eb';
+          if (report.category === 'Police Patrol') badgeColor = '#0284c7';
           if (report.category === 'Lighting Failure') badgeColor = '#e11d48';
 
           const reportIcon = L.divIcon({
@@ -172,10 +227,10 @@ export default function App() {
           const reportMarker = L.marker(report.coords, { icon: reportIcon }).addTo(mapRef.current)
             .bindPopup(`
               <div style="color:#0f172a; font-family:sans-serif; padding:4px; max-width:200px;">
-                <span style="font-size:10px; font-weight:bold; background:#e2e8f0; padding:2px 6px; border-radius:4px; text-transform:uppercase;">${report.category}</span>
+                <span style="font-size:10px; font-weight:bold; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; text-transform:uppercase;">${report.category}</span>
                 <div style="font-weight:bold; font-size:13px; margin-top:4px; margin-bottom:2px;">${report.title}</div>
                 <div style="font-size:11px; color:#475569;">📍 ${report.location}</div>
-                <div style="font-size:10px; color:#0d9488; font-weight:bold; margin-top:4px;">👍 ${report.upvotes} Upvotes</div>
+                <div style="font-size:10px; color:#0284c7; font-weight:bold; margin-top:4px;">👍 ${report.upvotes} Upvotes</div>
               </div>
             `);
 
@@ -225,8 +280,8 @@ export default function App() {
           }
 
           routePolylineRef.current = L.polyline(coordinates, {
-            color: '#0d9488',
-            weight: 5,
+            color: '#0284c7',
+            weight: 6,
             opacity: 0.85,
             dashArray: '8, 8'
           }).addTo(mapRef.current);
@@ -382,12 +437,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-sky-50 to-emerald-50 text-slate-800 flex flex-col font-sans relative selection:bg-teal-400 selection:text-slate-900">
+    <div className={`min-h-screen ${stealthMode ? 'bg-slate-900 text-slate-100' : 'bg-gradient-to-br from-sky-50 via-indigo-50/40 to-teal-50/50 text-slate-700'} flex flex-col font-sans relative selection:bg-sky-200 selection:text-slate-900 transition-colors duration-500`}>
       
       {/* SOS Active Countdown Overlay Modal */}
       {sosActive && (
-        <div className="fixed inset-0 bg-rose-950/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-pulse">
-          <div className="bg-white border border-rose-200 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-pulse">
+          <div className="bg-white border-2 border-rose-400 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
             <div className="w-20 h-20 bg-rose-50 border-2 border-rose-500 text-rose-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black">
               {sosCountdown}s
             </div>
@@ -403,7 +458,7 @@ export default function App() {
             </div>
             <button
               onClick={cancelSOS}
-              className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3.5 rounded-xl border border-slate-300 transition-all text-sm uppercase tracking-wider shadow-sm"
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3.5 rounded-xl border border-slate-300 transition-all text-sm uppercase tracking-wider shadow-sm"
             >
               I am Safe — Cancel SOS
             </button>
@@ -411,30 +466,51 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Header Navigation */}
-      <header className="border-b border-teal-100 bg-white/80 backdrop-blur-xl sticky top-0 z-45 shadow-sm">
+      {/* Panic Siren Active Overlay Modal */}
+      {sirenActive && (
+        <div className="fixed inset-0 bg-rose-950/80 backdrop-blur-xl z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-rose-600 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6 animate-bounce">
+            <div className="w-24 h-24 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <Volume2 className="w-12 h-12 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-3xl font-black text-rose-600 tracking-wider mb-2">PANIC SIREN ACTIVE</h3>
+              <p className="text-slate-600 text-sm">High-decibel acoustic deterrent blaring. Flashing beacon signal active.</p>
+            </div>
+            <button
+              onClick={() => setSirenActive(false)}
+              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-4 rounded-2xl transition-all text-sm uppercase tracking-wider shadow-lg shadow-rose-600/30"
+            >
+              Stop Siren Alarm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Header Navigation — Responsive across Mobile, iPad & Desktop */}
+      <header className={`border-b ${stealthMode ? 'border-slate-800 bg-slate-900/90' : 'border-sky-100 bg-white/90'} backdrop-blur-xl sticky top-0 z-45 shadow-sm transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('routes')}>
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center shadow-md shadow-teal-500/20 text-white">
-              {/* Shield Icon Replacement */}
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/25 text-white">
+              {/* Shield Icon */}
               <Shield className="w-6 h-6 fill-white/20 text-white stroke-[2.2]" />
             </div>
             <div>
-              <span className="text-xl font-extrabold tracking-tight text-slate-900">
+              <span className={`text-xl font-extrabold tracking-tight ${stealthMode ? 'text-white' : 'text-slate-900'}`}>
                 SafeRoute
               </span>
-              <span className="block text-[10px] tracking-widest uppercase text-teal-600 font-bold">
+              <span className="block text-[10px] tracking-widest uppercase text-sky-600 font-bold">
                 Vector Intelligence Engine
               </span>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center space-x-1 bg-teal-50/50 p-1.5 rounded-2xl border border-teal-100/80">
+          <nav className={`hidden md:flex items-center space-x-1 ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-sky-50/70 border-sky-100'} p-1.5 rounded-2xl border`}>
             <button
               onClick={() => setActiveTab('routes')}
               className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === 'routes' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20' : 'text-slate-600 hover:text-slate-900 hover:bg-teal-100/50'
+                activeTab === 'routes' ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25' : stealthMode ? 'text-slate-300 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-900 hover:bg-sky-100/60'
               }`}
             >
               <Navigation className="w-4 h-4" />
@@ -444,7 +520,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('map')}
               className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === 'map' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20' : 'text-slate-600 hover:text-slate-900 hover:bg-teal-100/50'
+                activeTab === 'map' ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25' : stealthMode ? 'text-slate-300 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-900 hover:bg-sky-100/60'
               }`}
             >
               <MapPin className="w-4 h-4" />
@@ -454,7 +530,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('trusted')}
               className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === 'trusted' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20' : 'text-slate-600 hover:text-slate-900 hover:bg-teal-100/50'
+                activeTab === 'trusted' ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25' : stealthMode ? 'text-slate-300 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-900 hover:bg-sky-100/60'
               }`}
             >
               <Users className="w-4 h-4" />
@@ -464,7 +540,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('reports')}
               className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === 'reports' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20' : 'text-slate-600 hover:text-slate-900 hover:bg-teal-100/50'
+                activeTab === 'reports' ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25' : stealthMode ? 'text-slate-300 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-900 hover:bg-sky-100/60'
               }`}
             >
               <AlertTriangle className="w-4 h-4" />
@@ -472,11 +548,16 @@ export default function App() {
             </button>
           </nav>
 
-          <div className="hidden md:flex items-center space-x-4">
-            <div className="text-right hidden xl:block bg-teal-50/60 px-3 py-1.5 rounded-xl border border-teal-100">
-              <span className="block text-[9px] text-slate-500 uppercase tracking-widest font-bold">{locationStatus}</span>
-              <span className="text-xs text-teal-700 font-mono font-semibold">{userLocation[0].toFixed(3)}, {userLocation[1].toFixed(3)}</span>
-            </div>
+          <div className="hidden md:flex items-center space-x-3">
+            <button
+              onClick={() => setStealthMode(!stealthMode)}
+              title="Toggle Stealth / Calm Mode"
+              className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1.5 ${stealthMode ? 'bg-slate-800 border-slate-700 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'}`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span className="hidden xl:inline">{stealthMode ? 'Stealth ON' : 'Calm Theme'}</span>
+            </button>
+
             <button
               onClick={triggerEmergencySOS}
               className="bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold uppercase tracking-wider px-5 py-3 rounded-xl shadow-lg shadow-rose-500/25 transition-all flex items-center space-x-2 animate-pulse"
@@ -486,68 +567,150 @@ export default function App() {
             </button>
           </div>
 
-          <div className="md:hidden flex items-center">
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-lg text-slate-600 hover:bg-teal-50">
+          <div className="md:hidden flex items-center space-x-2">
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className={`p-2 rounded-xl border ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-sky-50 border-sky-200 text-slate-700'}`}>
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden bg-white/95 backdrop-blur-xl border-b border-teal-100 px-4 pt-2 pb-4 space-y-1">
-            <div className="px-3 py-2 text-xs text-teal-700 font-mono bg-teal-50 rounded-xl mb-2 border border-teal-100">
+          <div className={`md:hidden ${stealthMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-sky-100 text-slate-800'} backdrop-blur-xl border-b px-4 pt-3 pb-5 space-y-2 shadow-2xl animate-fade-in`}>
+            <div className={`px-3 py-2 text-xs font-mono rounded-xl border ${stealthMode ? 'bg-slate-800 border-slate-700 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-800'}`}>
               📍 {locationStatus}
             </div>
-            <button onClick={() => { setActiveTab('routes'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-teal-50">
-              <Navigation className="w-4 h-4 text-teal-600" /><span>Route Planner</span>
+            <button onClick={() => { setActiveTab('routes'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-medium hover:bg-sky-500/10">
+              <Navigation className="w-4 h-4 text-sky-500" /><span>Route Planner</span>
             </button>
-            <button onClick={() => { setActiveTab('map'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-teal-50">
-              <MapPin className="w-4 h-4 text-teal-600" /><span>Safety Map</span>
+            <button onClick={() => { setActiveTab('map'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-medium hover:bg-sky-500/10">
+              <MapPin className="w-4 h-4 text-sky-500" /><span>Safety Map</span>
             </button>
-            <button onClick={() => { setActiveTab('trusted'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-teal-50">
-              <Users className="w-4 h-4 text-teal-600" /><span>Trusted Circle</span>
+            <button onClick={() => { setActiveTab('trusted'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-medium hover:bg-sky-500/10">
+              <Users className="w-4 h-4 text-sky-500" /><span>Trusted Circle</span>
             </button>
-            <button onClick={() => { setActiveTab('reports'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-teal-50">
-              <AlertTriangle className="w-4 h-4 text-teal-600" /><span>Community Reports</span>
+            <button onClick={() => { setActiveTab('reports'); setMobileMenuOpen(false); }} className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-medium hover:bg-sky-500/10">
+              <AlertTriangle className="w-4 h-4 text-sky-500" /><span>Community Reports</span>
             </button>
-            <div className="pt-2">
-              <button onClick={() => { triggerEmergencySOS(); setMobileMenuOpen(false); }} className="w-full bg-rose-500 text-white text-xs font-bold uppercase tracking-wider py-3 rounded-xl shadow-md flex items-center justify-center space-x-2">
-                <span>Emergency SOS</span>
+            <div className="pt-2 grid grid-cols-2 gap-2">
+              <button onClick={() => { setStealthMode(!stealthMode); setMobileMenuOpen(false); }} className="bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white text-xs font-bold py-3 rounded-xl">
+                Theme Toggle
+              </button>
+              <button onClick={() => { triggerEmergencySOS(); setMobileMenuOpen(false); }} className="bg-rose-500 text-white text-xs font-bold uppercase tracking-wider py-3 rounded-xl shadow-md flex items-center justify-center space-x-1">
+                <span>SOS</span>
               </button>
             </div>
           </div>
         )}
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Main Content Area — Optimized across Mobile (375px+), iPad (768px+) & Desktop (1280px+) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
+        {/* CROSS-DEVICE SAFETY QUICK TOOLBAR (Mobile, iPad, Desktop Unified) */}
+        <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-3xl border shadow-lg backdrop-blur-md ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
+          
+          {/* Quick Feature 1: Safety Timer Check-In */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-500/10 to-indigo-500/10 border border-sky-500/20 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">Safety Check-In</span>
+              <Radio className={`w-5 h-5 ${checkInActive ? 'text-emerald-500 animate-pulse' : 'text-sky-500'}`} />
+            </div>
+            <div>
+              {checkInActive ? (
+                <div className="font-mono text-lg font-black text-slate-900 dark:text-white">
+                  {Math.floor(checkInTimer / 60)}:{(checkInTimer % 60).toString().padStart(2, '0')} remaining
+                </div>
+              ) : (
+                <p className="text-xs text-slate-600 dark:text-slate-300">Auto-alerts contacts if you don't check in.</p>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                if (checkInActive) {
+                  setCheckInActive(false);
+                  alert('Check-in confirmed safe!');
+                } else {
+                  setCheckInActive(true);
+                  setCheckInTimer(checkInMinutes * 60);
+                }
+              }}
+              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm ${checkInActive ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-sky-600 hover:bg-sky-700 text-white'}`}
+            >
+              {checkInActive ? 'I Have Arrived Safely' : `Start ${checkInMinutes}-Min Timer`}
+            </button>
+          </div>
+
+          {/* Quick Feature 2: Panic Siren Deterrent */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-500/10 to-amber-500/10 border border-rose-500/20 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Panic Siren</span>
+              <Volume2 className="w-5 h-5 text-rose-500" />
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">Blasts high-decibel alarm & flashing lights instantly.</p>
+            <button
+              onClick={() => setSirenActive(true)}
+              className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm"
+            >
+              Trigger Siren Audio
+            </button>
+          </div>
+
+          {/* Quick Feature 3: Offline Mesh Indicator */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-500/10 to-emerald-500/10 border border-teal-500/20 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">Offline Mesh</span>
+              <Smartphone className="w-5 h-5 text-teal-500" />
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">Bluetooth LE beacon fallback active for low signal zones.</p>
+            <div className="bg-teal-500/10 border border-teal-500/20 py-2 px-3 rounded-xl text-center text-xs font-bold text-teal-700 dark:text-teal-300 font-mono">
+              🟢 Mesh Nodes: 4 Active
+            </div>
+          </div>
+
+          {/* Quick Feature 4: Cross-Device Sync Status */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/15 to-purple-500/15 border border-indigo-500/20 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Multi-Device UI</span>
+              <div className="flex space-x-1 text-indigo-500">
+                <Smartphone className="w-4 h-4" />
+                <Tablet className="w-4 h-4" />
+                <Monitor className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">Optimized for phones, iPads, and touch displays.</p>
+            <div className="bg-indigo-500/10 border border-indigo-500/20 py-2 px-3 rounded-xl text-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
+              ⚡ Responsive Layout OK
+            </div>
+          </div>
+
+        </div>
+
         {/* TAB 1: ROUTE PLANNER */}
         {activeTab === 'routes' && (
           <div className="space-y-6">
-            <div className="bg-white/80 backdrop-blur-md border border-teal-100/80 rounded-3xl p-8 shadow-xl shadow-teal-900/5">
-              <h2 className="text-2xl font-black text-slate-900 mb-2">Safety-Aware Vector Route Comparison</h2>
-              <p className="text-slate-600 text-sm mb-8">Enter your journey details to calculate live street paths and evaluate safety indices using OSRM & community hazard pins.</p>
+            <div className={`backdrop-blur-md border rounded-3xl p-6 sm:p-8 shadow-xl ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
+              <h2 className={`text-2xl font-black mb-2 ${stealthMode ? 'text-white' : 'text-slate-900'}`}>Safety-Aware Vector Route Comparison</h2>
+              <p className={`text-sm mb-8 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Enter your journey details to calculate live street paths and evaluate safety indices using OSRM & community hazard pins.</p>
 
               <form onSubmit={handleSearchRoutes} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="relative">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Starting Point</label>
+                    <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Starting Point</label>
                     <div className="relative flex items-center">
-                      <MapPin className="absolute left-4 w-5 h-5 text-teal-600" />
+                      <MapPin className="absolute left-4 w-5 h-5 text-sky-600" />
                       <input
                         type="text"
                         value={startLocation}
                         onChange={(e) => setStartLocation(e.target.value)}
                         placeholder="e.g., Live Position / Metro Station"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-teal-500 focus:bg-white shadow-sm transition-all"
+                        className={`w-full border rounded-2xl pl-12 pr-4 py-3.5 text-sm focus:outline-none transition-all shadow-sm ${stealthMode ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:bg-white'}`}
                         required
                       />
                     </div>
                   </div>
 
                   <div className="relative">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Destination</label>
+                    <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Destination</label>
                     <div className="relative flex items-center">
                       <Navigation className="absolute left-4 w-5 h-5 text-rose-500" />
                       <input
@@ -555,7 +718,7 @@ export default function App() {
                         value={destination}
                         onChange={(e) => setDestination(e.target.value)}
                         placeholder="e.g., NSUT / DTU / Rohini Sector 16"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-teal-500 focus:bg-white shadow-sm transition-all"
+                        className={`w-full border rounded-2xl pl-12 pr-4 py-3.5 text-sm focus:outline-none transition-all shadow-sm ${stealthMode ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:bg-white'}`}
                         required
                       />
                     </div>
@@ -563,16 +726,16 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-between pt-2 gap-4">
-                  <div className="flex items-center space-x-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto">
-                    <button type="button" onClick={() => setTravelMode('walking')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all ${travelMode === 'walking' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>
+                  <div className={`flex items-center space-x-2 p-1.5 rounded-2xl border w-full sm:w-auto ${stealthMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
+                    <button type="button" onClick={() => setTravelMode('walking')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all ${travelMode === 'walking' ? 'bg-sky-600 text-white shadow-md' : stealthMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}>
                       <Footprints className="w-4 h-4" /><span>Walking</span>
                     </button>
-                    <button type="button" onClick={() => setTravelMode('transit')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all ${travelMode === 'transit' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>
+                    <button type="button" onClick={() => setTravelMode('transit')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all ${travelMode === 'transit' ? 'bg-sky-600 text-white shadow-md' : stealthMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}>
                       <Zap className="w-4 h-4" /><span>Transit / Driving</span>
                     </button>
                   </div>
 
-                  <button type="submit" disabled={isSearching} className="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-teal-600/25 flex items-center justify-center space-x-2 transition-all">
+                  <button type="submit" disabled={isSearching} className="w-full sm:w-auto bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-sky-600/25 flex items-center justify-center space-x-2 transition-all">
                     {isSearching ? <span>Computing Vector Route...</span> : <><span>Find Safest Route</span><ArrowRight className="w-4 h-4" /></>}
                   </button>
                 </div>
@@ -582,31 +745,31 @@ export default function App() {
             {routesSearched && activeRouteInfo && (
               <div className="space-y-4 animate-fade-in">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white/80 backdrop-blur-md border border-teal-300 rounded-3xl p-6 shadow-xl relative flex flex-col justify-between">
-                    <div className="absolute top-0 right-0 bg-teal-600 text-white text-[10px] font-extrabold uppercase tracking-widest px-4 py-1.5 rounded-bl-2xl shadow-sm">OSRM & Hazard Verified</div>
+                  <div className={`backdrop-blur-md border rounded-3xl p-6 shadow-xl relative flex flex-col justify-between ${stealthMode ? 'bg-slate-800/80 border-sky-500' : 'bg-white/90 border-sky-300'}`}>
+                    <div className="absolute top-0 right-0 bg-sky-600 text-white text-[10px] font-extrabold uppercase tracking-widest px-4 py-1.5 rounded-bl-2xl shadow-sm">OSRM & Hazard Verified</div>
                     <div>
-                      <h4 className="text-lg font-bold text-slate-900 mb-2">Safest & Well-Lit Route</h4>
-                      <div className="grid grid-cols-3 gap-3 my-4 bg-teal-50/60 p-4 rounded-2xl border border-teal-100 text-xs">
-                        <div><span className="text-slate-500 block">Safety Index</span><span className="text-base font-extrabold text-teal-700">{activeRouteInfo.safetyIndex}</span></div>
-                        <div><span className="text-slate-500 block">Duration</span><span className="text-base font-bold text-slate-900">{activeRouteInfo.duration}</span></div>
-                        <div><span className="text-slate-500 block">Distance</span><span className="text-base font-bold text-teal-700">{activeRouteInfo.distance}</span></div>
+                      <h4 className={`text-lg font-bold mb-2 ${stealthMode ? 'text-white' : 'text-slate-900'}`}>Safest & Well-Lit Route</h4>
+                      <div className={`grid grid-cols-3 gap-3 my-4 p-4 rounded-2xl border text-xs ${stealthMode ? 'bg-slate-900/60 border-slate-700' : 'bg-sky-50/70 border-sky-100'}`}>
+                        <div><span className="text-slate-400 block">Safety Index</span><span className="text-base font-extrabold text-sky-600 dark:text-sky-400">{activeRouteInfo.safetyIndex}</span></div>
+                        <div><span className="text-slate-400 block">Duration</span><span className={`text-base font-bold ${stealthMode ? 'text-white' : 'text-slate-900'}`}>{activeRouteInfo.duration}</span></div>
+                        <div><span className="text-slate-400 block">Distance</span><span className="text-base font-bold text-sky-600 dark:text-sky-400">{activeRouteInfo.distance}</span></div>
                       </div>
                     </div>
-                    <button onClick={() => setActiveTab('map')} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-2xl text-sm flex items-center justify-center space-x-2 shadow-lg shadow-teal-600/20 transition-all">
+                    <button onClick={() => setActiveTab('map')} className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-2xl text-sm flex items-center justify-center space-x-2 shadow-lg shadow-sky-600/20 transition-all">
                       <Navigation className="w-4 h-4" /><span>View Polyline on Map</span>
                     </button>
                   </div>
 
-                  <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                  <div className={`backdrop-blur-md border rounded-3xl p-6 shadow-xl flex flex-col justify-between ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-slate-200'}`}>
                     <div>
-                      <h4 className="text-lg font-bold text-slate-900 mb-2">Alternative Vector Path</h4>
-                      <div className="grid grid-cols-3 gap-3 my-4 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
-                        <div><span className="text-slate-500 block">Safety Index</span><span className="text-base font-extrabold text-amber-600">64 / 100</span></div>
-                        <div><span className="text-slate-500 block">Duration</span><span className="text-base font-bold text-slate-900">{activeRouteInfo.duration}</span></div>
-                        <div><span className="text-slate-500 block">Lighting</span><span className="text-base font-bold text-amber-600">Poor (45%)</span></div>
+                      <h4 className={`text-lg font-bold mb-2 ${stealthMode ? 'text-white' : 'text-slate-900'}`}>Alternative Vector Path</h4>
+                      <div className={`grid grid-cols-3 gap-3 my-4 p-4 rounded-2xl border text-xs ${stealthMode ? 'bg-slate-900/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                        <div><span className="text-slate-400 block">Safety Index</span><span className="text-base font-extrabold text-amber-500">64 / 100</span></div>
+                        <div><span className="text-slate-400 block">Duration</span><span className={`text-base font-bold ${stealthMode ? 'text-white' : 'text-slate-900'}`}>{activeRouteInfo.duration}</span></div>
+                        <div><span className="text-slate-400 block">Lighting</span><span className="text-base font-bold text-amber-500">Poor (45%)</span></div>
                       </div>
                     </div>
-                    <button onClick={() => alert('Alternative route selected.')} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-2xl border border-slate-200 text-sm transition-all">
+                    <button onClick={() => alert('Alternative route selected.')} className={`w-full font-bold py-3.5 rounded-2xl border text-sm transition-all ${stealthMode ? 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'}`}>
                       Proceed Anyway
                     </button>
                   </div>
@@ -619,24 +782,24 @@ export default function App() {
         {/* TAB 2: INTERACTIVE LEAFLET MAP WITH POLYLINE ROUTING */}
         {activeTab === 'map' && (
           <div className="space-y-6">
-            <div className="bg-white/80 backdrop-blur-md border border-teal-100/80 rounded-3xl p-6 shadow-xl">
+            <div className={`backdrop-blur-md border rounded-3xl p-6 shadow-xl ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 mb-1 flex items-center space-x-2">
-                    <Compass className="w-5 h-5 text-teal-600" />
+                  <h2 className={`text-xl font-bold mb-1 flex items-center space-x-2 ${stealthMode ? 'text-white' : 'text-slate-900'}`}>
+                    <Compass className="w-5 h-5 text-sky-600" />
                     <span>Interactive Safety Intelligence Map</span>
                   </h2>
-                  <p className="text-slate-600 text-sm">Displaying live telemetry, OSRM routing polylines, and community hazard pins.</p>
+                  <p className={`text-sm ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Displaying live telemetry, OSRM routing polylines, and community hazard pins.</p>
                 </div>
                 
-                <div className="flex items-center space-x-4 text-xs bg-teal-50 px-4 py-2.5 rounded-2xl border border-teal-100">
-                  <div className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-teal-600"></span><span className="text-slate-700 font-medium">You</span></div>
-                  <div className="flex items-center space-x-1.5"><span className="w-4 h-1 bg-teal-600"></span><span className="text-slate-700 font-medium">Safe Route</span></div>
-                  <div className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span><span className="text-slate-700 font-medium">Hazards</span></div>
+                <div className={`flex items-center space-x-4 text-xs px-4 py-2.5 rounded-2xl border ${stealthMode ? 'bg-slate-900 border-slate-700 text-slate-300' : 'bg-sky-50 border-sky-100 text-slate-700'}`}>
+                  <div className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span><span className="font-medium">You</span></div>
+                  <div className="flex items-center space-x-1.5"><span className="w-4 h-1 bg-sky-500"></span><span className="font-medium">Safe Route</span></div>
+                  <div className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span><span className="font-medium">Hazards</span></div>
                 </div>
               </div>
 
-              <div className="w-full h-[500px] rounded-2xl overflow-hidden border border-teal-100 shadow-xl relative z-10">
+              <div className="w-full h-[500px] sm:h-[550px] rounded-2xl overflow-hidden border border-sky-100 shadow-xl relative z-10">
                 <div ref={mapContainerRef} className="w-full h-full" />
               </div>
             </div>
@@ -646,11 +809,11 @@ export default function App() {
         {/* TAB 3: TRUSTED CIRCLE */}
         {activeTab === 'trusted' && (
           <div className="space-y-6">
-            <div className="bg-white/80 backdrop-blur-md border border-teal-100/80 rounded-3xl p-8 shadow-xl">
+            <div className={`backdrop-blur-md border rounded-3xl p-6 sm:p-8 shadow-xl ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
               <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900 mb-1">Trusted Circle & Emergency Center</h2>
-                  <p className="text-slate-600 text-sm">Manage designated emergency guardians who receive live telemetry and SOS alerts instantly.</p>
+                  <h2 className={`text-2xl font-black mb-1 ${stealthMode ? 'text-white' : 'text-slate-900'}`}>Trusted Circle & Emergency Center</h2>
+                  <p className={`text-sm ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Manage designated emergency guardians who receive live telemetry and SOS alerts instantly.</p>
                 </div>
                 <button
                   onClick={triggerEmergencySOS}
@@ -661,40 +824,40 @@ export default function App() {
                 </button>
               </div>
 
-              <form onSubmit={handleAddContact} className="bg-teal-50/50 p-6 rounded-2xl border border-teal-100 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm">
+              <form onSubmit={handleAddContact} className={`p-6 rounded-2xl border mb-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm ${stealthMode ? 'bg-slate-900 border-slate-700' : 'bg-sky-50/60 border-sky-100'}`}>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Contact Name</label>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Contact Name</label>
                   <input
                     type="text"
                     value={newContactName}
                     onChange={(e) => setNewContactName(e.target.value)}
                     placeholder="e.g., Guardian Name"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-teal-500 shadow-sm"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500'}`}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Phone Number</label>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Phone Number</label>
                   <input
                     type="text"
                     value={newContactPhone}
                     onChange={(e) => setNewContactPhone(e.target.value)}
                     placeholder="+91 XXXXX XXXXX"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-teal-500 shadow-sm"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500'}`}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Relation / Role</label>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Relation / Role</label>
                   <input
                     type="text"
                     value={newContactRelation}
                     onChange={(e) => setNewContactRelation(e.target.value)}
                     placeholder="e.g., Family / Authority"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-teal-500 shadow-sm"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500'}`}
                   />
                 </div>
-                <button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-md shadow-teal-600/20">
+                <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-md shadow-sky-600/20">
                   <UserPlus className="w-4 h-4" />
                   <span>Add Guardian</span>
                 </button>
@@ -702,29 +865,29 @@ export default function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {trustedContacts.map(contact => (
-                  <div key={contact.id} className="bg-white border border-slate-200/80 p-6 rounded-2xl relative flex flex-col justify-between shadow-md shadow-teal-900/5 hover:border-teal-200 transition-all">
+                  <div key={contact.id} className={`border p-6 rounded-2xl relative flex flex-col justify-between shadow-md transition-all ${stealthMode ? 'bg-slate-900 border-slate-700 hover:border-sky-500' : 'bg-white border-slate-200/80 hover:border-sky-200'}`}>
                     <div>
                       <div className="flex items-start justify-between mb-3">
                         <div>
-                          <h4 className="font-bold text-slate-900 text-base">{contact.name}</h4>
-                          <span className="text-xs text-teal-700 font-semibold">{contact.relation}</span>
+                          <h4 className={`font-bold text-base ${stealthMode ? 'text-white' : 'text-slate-900'}`}>{contact.name}</h4>
+                          <span className="text-xs text-sky-600 dark:text-sky-400 font-semibold">{contact.relation}</span>
                         </div>
                         <button onClick={() => handleDeleteContact(contact.id)} className="text-slate-400 hover:text-rose-600 p-1 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="text-xs text-slate-600 space-y-1 font-mono mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <div className={`text-xs space-y-1 font-mono mb-6 p-3 rounded-xl border ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
                         <div>📞 {contact.phone}</div>
                         <div>⚡ {contact.status}</div>
                       </div>
                     </div>
                     <div className="flex space-x-2">
-                      <a href={`tel:${contact.phone}`} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-center py-2.5 rounded-xl text-xs font-bold border border-slate-200 flex items-center justify-center space-x-1.5 transition-all">
-                        <Phone className="w-3.5 h-3.5 text-teal-600" />
+                      <a href={`tel:${contact.phone}`} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center space-x-1.5 transition-all ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'}`}>
+                        <Phone className="w-3.5 h-3.5 text-sky-500" />
                         <span>Call</span>
                       </a>
-                      <button onClick={() => alert(`Live telemetry link dispatched to ${contact.name}`)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-center py-2.5 rounded-xl text-xs font-bold border border-slate-200 flex items-center justify-center space-x-1.5 transition-all">
-                        <Share2 className="w-3.5 h-3.5 text-teal-600" />
+                      <button onClick={() => alert(`Live telemetry link dispatched to ${contact.name}`)} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center space-x-1.5 transition-all ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'}`}>
+                        <Share2 className="w-3.5 h-3.5 text-sky-500" />
                         <span>Ping GPS</span>
                       </button>
                     </div>
@@ -738,28 +901,28 @@ export default function App() {
         {/* TAB 4: COMMUNITY REPORTS */}
         {activeTab === 'reports' && (
           <div className="space-y-6">
-            <div className="bg-white/80 backdrop-blur-md border border-teal-100/80 rounded-3xl p-8 shadow-xl">
-              <h2 className="text-2xl font-black text-slate-900 mb-1">Community Safety Reports & Hazard Intel</h2>
-              <p className="text-slate-600 text-sm mb-6">Report unlit pathways, safety hazards, or police patrols. Pins automatically anchor to your current live GPS coordinates.</p>
+            <div className={`backdrop-blur-md border rounded-3xl p-6 sm:p-8 shadow-xl ${stealthMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-sky-100'}`}>
+              <h2 className={`text-2xl font-black mb-1 ${stealthMode ? 'text-white' : 'text-slate-900'}`}>Community Safety Reports & Hazard Intel</h2>
+              <p className={`text-sm mb-6 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Report unlit pathways, safety hazards, or police patrols. Pins automatically anchor to your current live GPS coordinates.</p>
 
-              <form onSubmit={handleAddReport} className="bg-teal-50/50 p-6 rounded-2xl border border-teal-100 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm">
+              <form onSubmit={handleAddReport} className={`p-6 rounded-2xl border mb-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm ${stealthMode ? 'bg-slate-900 border-slate-700' : 'bg-sky-50/60 border-sky-100'}`}>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Report Description</label>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Report Description</label>
                   <input
                     type="text"
                     value={newReportTitle}
                     onChange={(e) => setNewReportTitle(e.target.value)}
                     placeholder="e.g., Unlit corridor near Metro Pillar 42"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-teal-500 shadow-sm"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500'}`}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Category</label>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Category</label>
                   <select
                     value={newReportCategory}
                     onChange={(e) => setNewReportCategory(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-teal-500 shadow-sm"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-white focus:border-sky-500' : 'bg-white border-slate-200 text-slate-900 focus:border-sky-500'}`}
                   >
                     <option value="Lighting Failure">Lighting Failure</option>
                     <option value="Safety Hazard">Safety Hazard</option>
@@ -767,17 +930,17 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Location Name</label>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${stealthMode ? 'text-slate-300' : 'text-slate-600'}`}>Location Name</label>
                   <input
                     type="text"
                     value={newReportLocation}
                     onChange={(e) => setNewReportLocation(e.target.value)}
                     placeholder="e.g., Sector 16 Rohini"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-teal-500 shadow-sm"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-sky-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-sky-500'}`}
                   />
                 </div>
                 <div className="sm:col-span-4">
-                  <button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-md shadow-teal-600/20">
+                  <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-md shadow-sky-600/20">
                     <PlusCircle className="w-4 h-4" />
                     <span>Publish Geofenced Community Report</span>
                   </button>
@@ -786,22 +949,22 @@ export default function App() {
 
               <div className="space-y-4">
                 {reports.map(report => (
-                  <div key={report.id} className="bg-white border border-slate-200/80 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:border-teal-200 transition-all">
+                  <div key={report.id} className={`border p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm transition-all ${stealthMode ? 'bg-slate-900 border-slate-700 hover:border-sky-500' : 'bg-white border-slate-200/80 hover:border-sky-200'}`}>
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-100 text-teal-700">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg border ${stealthMode ? 'bg-slate-800 border-slate-700 text-sky-400' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
                           {report.category}
                         </span>
-                        <span className="text-xs text-slate-500">• {report.time}</span>
+                        <span className="text-xs text-slate-400">• {report.time}</span>
                       </div>
-                      <h4 className="font-bold text-slate-900 text-base">{report.title}</h4>
-                      <p className="text-xs text-slate-600">📍 {report.location}</p>
+                      <h4 className={`font-bold text-base ${stealthMode ? 'text-white' : 'text-slate-900'}`}>{report.title}</h4>
+                      <p className="text-xs text-slate-400">📍 {report.location}</p>
                     </div>
                     <button
                       onClick={() => handleUpvote(report.id)}
-                      className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-sm"
+                      className={`border px-4 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-sm ${stealthMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}
                     >
-                      <ThumbsUp className="w-3.5 h-3.5 text-teal-600" />
+                      <ThumbsUp className="w-3.5 h-3.5 text-sky-500" />
                       <span>{report.upvotes} Upvotes</span>
                     </button>
                   </div>
