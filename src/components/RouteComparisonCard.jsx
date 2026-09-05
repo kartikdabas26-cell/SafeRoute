@@ -94,12 +94,12 @@ const RouteComparisonCard = ({ route, isRecommended, isSelected, onSelect, onVie
       {/* Quick summary */}
       <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-slate-50 rounded-2xl text-xs">
         <div>
-          <div className="text-slate-500 font-semibold">Reports</div>
-          <div className="font-bold text-slate-900">{route.components?.community || 0}</div>
+          <div className="text-slate-500 font-semibold">Reports nearby</div>
+          <div className="font-bold text-slate-900">{route.nearbyReportCount ?? 0}</div>
         </div>
         <div>
-          <div className="text-slate-500 font-semibold">Facilities</div>
-          <div className="font-bold text-slate-900">{route.components?.emergency || 0}</div>
+          <div className="text-slate-500 font-semibold">Facilities nearby</div>
+          <div className="font-bold text-slate-900">{route.nearbyFacilityCount ?? 0}</div>
         </div>
       </div>
 
@@ -172,13 +172,26 @@ const RouteComparisonCard = ({ route, isRecommended, isSelected, onSelect, onVie
                   />
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-bold">
+                  <span>Efficiency (distance/time)</span>
+                  <span className="text-slate-900">{route.components.efficiency}/100</span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-purple-500"
+                    style={{ width: `${route.components.efficiency}%` }}
+                  />
+                </div>
+              </div>
             </>
           )}
 
           {route.explanation && route.explanation.length > 0 && (
             <div className="pt-3 border-t border-slate-200 space-y-1">
               <div className="text-xs font-bold text-slate-500 uppercase">Why this score</div>
-              {route.explanation.slice(0, 3).map((item, idx) => (
+              {route.explanation.slice(0, 4).map((item, idx) => (
                 <div key={idx} className="flex gap-2 text-xs text-slate-600">
                   <Check className="w-3.5 h-3.5 text-teal-500 shrink-0 mt-0.5" />
                   <span>{item}</span>
