@@ -21,27 +21,22 @@ const MapFilterPanel = ({
   };
 
   const filterGroups = {
-    "Safety Zones": ["zones", "heatmap"],
-    "Reports": ["reports", "community_reports"],
+    "Reports": ["reports"],
     "Emergency Services": ["police", "hospitals", "pharmacies"],
     "Support Services": ["washrooms", "help_points", "support_centers"],
-    "Route Info": ["route_scores", "segment_scores"],
+    "All Facilities": ["facilities"],
   };
 
   const getFilterIcon = (filterKey) => {
     const icons = {
-      zones: "🟢",
-      heatmap: "🌡️",
       reports: "⚠️",
-      community_reports: "💬",
       police: "🛡️",
       hospitals: "🏥",
       pharmacies: "💊",
       washrooms: "🚻",
       help_points: "🆘",
       support_centers: "👥",
-      route_scores: "📊",
-      segment_scores: "📈",
+      facilities: "📍",
     };
     return icons[filterKey] || "📍";
   };

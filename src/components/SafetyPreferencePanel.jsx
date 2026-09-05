@@ -22,26 +22,31 @@ const SafetyPreferencePanel = ({ onWeightsChange, presets, initialWeights }) => 
 
   const handleSliderChange = (key, value) => {
     const otherKeys = Object.keys(weights).filter((k) => k !== key);
-    
-    // Distribute the change proportionally among other sliders
+    const remaining = 100 - value;
+    const otherTotal = otherKeys.reduce((sum, k) => sum + weights[k], 0);
+
     const newWeights = { ...weights, [key]: value };
-    const otherTotal = otherKeys.reduce((sum, k) => sum + newWeights[k], 0);
 
     if (otherTotal > 0) {
-      otherKeys.forEach((k) => {
-        const ratio = newWeights[k] / otherTotal;
-        newWeights[k] = Math.max(5, Math.round(ratio * (100 - value)));
+      // Distribute the remaining percentage proportionally, giving the last
+      // key whatever's left over so rounding always lands on exactly 100
+      // (instead of dumping a large remainder into one key, which could
+      // push it negative).
+      let allocated = 0;
+      otherKeys.forEach((k, index) => {
+        const isLast = index === otherKeys.length - 1;
+        const share = isLast
+          ? remaining - allocated
+          : Math.round((weights[k] / otherTotal) * remaining);
+        newWeights[k] = Math.max(0, share);
+        allocated += newWeights[k];
       });
-    }
-
-    // Ensure total is exactly 100
-    const total = Object.values(newWeights).reduce((a, b) => a + b, 0);
-    if (total !== 100) {
-      const diff = 100 - total;
-      const firstOtherKey = otherKeys[0];
-      if (firstOtherKey) {
-        newWeights[firstOtherKey] += diff;
-      }
+    } else {
+      // Other sliders were already at 0 - split what's left evenly.
+      const share = Math.floor(remaining / otherKeys.length);
+      otherKeys.forEach((k) => {
+        newWeights[k] = Math.max(0, share);
+      });
     }
 
     setWeights(newWeights);
