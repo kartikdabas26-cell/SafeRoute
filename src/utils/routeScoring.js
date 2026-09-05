@@ -185,6 +185,13 @@ function calculateEfficiency(route) {
 
   const distanceKm = route.distanceMeters / 1000;
   const durationMin = route.durationSeconds / 60;
+  const fastestDistance = route.comparison?.fastestDistanceMeters || route.distanceMeters;
+  const fastestDuration = route.comparison?.fastestDurationSeconds || route.durationSeconds;
+
+  const distanceRatio = distanceKm / (fastestDistance / 1000);
+  const durationRatio = durationMin / (fastestDuration / 60);
+  score -= Math.min(18, Math.max(0, (distanceRatio - 1) * 45));
+  score -= Math.min(18, Math.max(0, (durationRatio - 1) * 30));
 
   // Shorter routes are slightly safer (less exposure)
   if (distanceKm < 3) {

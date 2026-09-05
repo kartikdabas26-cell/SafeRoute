@@ -56,6 +56,18 @@ const RouteComparisonCard = ({ route, isRecommended, isSelected, onSelect, onVie
               Select this route
             </button>
           )}
+          <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-600">
+            <input
+              type="radio"
+              name="selected-route"
+              value={route.id}
+              checked={isSelected}
+              onChange={() => onSelect(route.id)}
+              onClick={(event) => event.stopPropagation()}
+              className="h-4 w-4 accent-sky-600"
+            />
+            {isSelected ? "Selected route" : "Choose this route"}
+          </label>
           <p className="text-xs text-slate-500">
             {route.distance} • {route.duration}
           </p>

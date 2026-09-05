@@ -2045,15 +2045,23 @@ export default function App() {
   const handleWeightsChange = useCallback((weights) => {
     setSafetyWeights(weights);
 
-    if (routes.length > 0) {
-      const rescored = routes
-        .map((route) => scoreRoute(route, reports, facilities, weights))
-        .sort((a, b) => b.score - a.score);
+    setRoutes((currentRoutes) => {
+      if (currentRoutes.length === 0) return currentRoutes;
 
-      setRoutes(rescored);
-      setSelectedRouteId(rescored[0]?.id ?? null);
-    }
-  }, [routes, reports, facilities]);
+      const rescored = currentRoutes
+        .map((route) => scoreRoute(route, reports, facilities, weights))
+        .sort((a, b) => b.score - a.score)
+        .map((route, index) => ({ ...route, rank: index + 1 }));
+
+      setSelectedRouteId((currentSelectedId) =>
+        rescored.some((route) => route.id === currentSelectedId)
+          ? currentSelectedId
+          : rescored[0]?.id ?? null
+      );
+
+      return rescored;
+    });
+  }, [reports, facilities]);
 
   const handleAddContact = async (event) => {
     event.preventDefault();
@@ -2200,8 +2208,12 @@ export default function App() {
         travelMode === "walking" ? "foot" : "driving"
       );
 
+      const comparison = {
+        fastestDistanceMeters: Math.min(...routesFromApi.map((route) => route.distanceMeters)),
+        fastestDurationSeconds: Math.min(...routesFromApi.map((route) => route.durationSeconds)),
+      };
       const scored = routesFromApi
-        .map((route) => scoreRoute(route, reports, facilities, safetyWeights))
+        .map((route) => scoreRoute({ ...route, comparison }, reports, facilities, safetyWeights))
         .sort((a, b) => b.score - a.score)
         .map((route, idx) => ({
           ...route,
