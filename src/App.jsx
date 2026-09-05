@@ -255,9 +255,7 @@ async function geocodePlace(query, fallbackCenter) {
 async function fetchRoutes(startCoords, destCoords, profile) {
   const base = `https://router.project-osrm.org/route/v1/${profile}/${startCoords[1]},${startCoords[0]};${destCoords[1]},${destCoords[0]}`;
   const url = `${base}?alternatives=true&overview=full&geometries=geojson&steps=false`;
-
   const response = await fetch(url);
-
   if (!response.ok) {
     throw new Error(`Routing failed with HTTP ${response.status}`);
   }
@@ -277,6 +275,39 @@ async function fetchRoutes(startCoords, destCoords, profile) {
     durationSeconds: route.duration,
     coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
   }));
+}
+
+async function fetchNearbyFacilities(location) {
+  const [latitude, longitude] = location || [];
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+
+  const query = `[out:json][timeout:20];(nwr[amenity~"^(police|hospital|clinic|pharmacy|toilets)$"](around:5000,${latitude},${longitude});nwr[emergency="ambulance_station"](around:5000,${latitude},${longitude}););out center tags;`;
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ data: query }),
+  });
+  if (!response.ok) throw new Error(`Facility lookup failed with HTTP ${response.status}`);
+
+  const data = await response.json();
+  return (data.elements || []).map((element) => {
+    const tags = element.tags || {};
+    const rawCategory = tags.amenity === "toilets" ? "Washroom" : tags.amenity === "ambulance_station" ? "Help Point" : tags.amenity;
+    const category = rawCategory ? rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1) : "Support Center";
+    const coords = element.lat && element.lon ? [element.lat, element.lon] : element.center ? [element.center.lat, element.center.lon] : null;
+    return {
+      id: `osm-${element.type}-${element.id}`,
+      name: tags.name || `${category} near you`,
+      category,
+      coords,
+      address: [tags["addr:street"], tags["addr:city"]].filter(Boolean).join(", "),
+      phone: tags.phone || "",
+      operatingHours: tags.opening_hours || "",
+      verified: false,
+      accessible: tags.wheelchair === "yes",
+      source: "OpenStreetMap",
+    };
+  }).filter((facility) => facility.coords);
 }
 
 // Status pill component
@@ -711,7 +742,7 @@ function MapView({
         }));
 
     routeData.forEach((route) => {
-      if (layerVisibility.alternateRoute === false) return;
+      if (route.id !== selectedRouteId && layerVisibility.alternateRoute === false) return;
       addLayer(L.polyline(route.coordinates, {
         color: route.color,
         weight: route.weight,
@@ -1703,7 +1734,7 @@ export default function App() {
   // Data
   const [reports, setReports] = useState([]);
   const [trustedContacts, setTrustedContacts] = useState([]);
-  const [facilities] = useState([]);
+  const [facilities, setFacilities] = useState([]);
 
   // Forms
   const [newContactName, setNewContactName] = useState("");
@@ -1940,6 +1971,22 @@ export default function App() {
       cancelled = true;
     };
   }, [user?.uid]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchNearbyFacilities(userLocation)
+      .then((items) => {
+        if (!cancelled) setFacilities(items);
+      })
+      .catch((error) => {
+        console.warn("Facility lookup failed", error);
+        if (!cancelled) setFacilities([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
 
   // Recalculate routes when weights change
   const handleWeightsChange = useCallback((weights) => {
