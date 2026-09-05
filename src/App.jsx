@@ -42,6 +42,8 @@ import { analyzeReportQuality, autoCategorizeReport } from "./utils/reportAnalys
 import { getFacilityStyle } from "./utils/facilityScoring";
 import {
   SAFETY_PRESETS,
+  DEMO_MAP_FACILITIES,
+  DEMO_MAP_REPORTS,
 } from "./utils/demoData";
 
 // Import components
@@ -266,7 +268,7 @@ async function fetchRoutes(startCoords, destCoords, profile) {
     throw new Error(data.message || "No route was returned");
   }
 
-  return data.routes.map((route, index) => ({
+  const routes = data.routes.map((route, index) => ({
     id: `route-${index + 1}`,
     name: index === 0 ? "Primary route" : `Alternative route ${index}`,
     distance: `${(route.distance / 1000).toFixed(1)} km`,
@@ -275,6 +277,56 @@ async function fetchRoutes(startCoords, destCoords, profile) {
     durationSeconds: route.duration,
     coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
   }));
+
+  if (routes.length >= 3) return routes;
+
+  const primary = routes[0];
+  const midpoint = primary.coordinates[Math.floor(primary.coordinates.length / 2)];
+  const latitudeOffset = 0.006;
+  const detourCandidates = [
+    [midpoint[0] + latitudeOffset, midpoint[1]],
+    [midpoint[0] - latitudeOffset, midpoint[1]],
+  ];
+
+  for (const [index, [latitude, longitude]] of detourCandidates.entries()) {
+    if (routes.length >= 3) break;
+
+    try {
+      const detourBase = `https://router.project-osrm.org/route/v1/${profile}/${startCoords[1]},${startCoords[0]};${longitude},${latitude};${destCoords[1]},${destCoords[0]}`;
+      const detourResponse = await fetch(
+        `${detourBase}?overview=full&geometries=geojson&steps=false`
+      );
+      if (!detourResponse.ok) continue;
+
+      const detourData = await detourResponse.json();
+      const detour = detourData.routes?.[0];
+      if (!detour) continue;
+
+      const coordinates = detour.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      const duplicate = routes.some((route) =>
+        route.coordinates.some(
+          ([lat, lng], pointIndex) =>
+            Math.abs(lat - coordinates[pointIndex]?.[0]) < 0.0001 &&
+            Math.abs(lng - coordinates[pointIndex]?.[1]) < 0.0001
+        )
+      );
+      if (duplicate) continue;
+
+      routes.push({
+        id: `route-${routes.length + 1}`,
+        name: `Alternative route ${index + 1}`,
+        distance: `${(detour.distance / 1000).toFixed(1)} km`,
+        distanceMeters: detour.distance,
+        duration: `${Math.ceil(detour.duration / 60)} mins`,
+        durationSeconds: detour.duration,
+        coordinates,
+      });
+    } catch (error) {
+      console.warn("Alternative route lookup failed", error);
+    }
+  }
+
+  return routes;
 }
 
 async function fetchNearbyFacilities(location) {
@@ -1433,7 +1485,7 @@ function GuardianDashboard({ user, profile, onLogout, onProfile }) {
 
 function PoliceDashboard({ user, profile, onLogout, onProfile }) {
   const [alerts, setAlerts] = useState([]);
-  const [reports, setReports] = useState([]);
+  const [reports, setReports] = useState(DEMO_MAP_REPORTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingResolutionId, setPendingResolutionId] = useState(null);
@@ -1734,7 +1786,7 @@ export default function App() {
   // Data
   const [reports, setReports] = useState([]);
   const [trustedContacts, setTrustedContacts] = useState([]);
-  const [facilities, setFacilities] = useState([]);
+  const [facilities, setFacilities] = useState(DEMO_MAP_FACILITIES);
 
   // Forms
   const [newContactName, setNewContactName] = useState("");
@@ -1943,7 +1995,7 @@ export default function App() {
     const loadData = async () => {
       if (!user?.uid) {
         setTrustedContacts([]);
-        setReports([]);
+        setReports(DEMO_MAP_REPORTS);
         return;
       }
 
@@ -1957,11 +2009,11 @@ export default function App() {
 
         setTrustedContacts((contacts || []).map(normalizeContact));
         const normalizedReports = (reportsFromFirebase || []).map(normalizeReport);
-        setReports(normalizedReports);
+        setReports(normalizedReports.length ? normalizedReports : DEMO_MAP_REPORTS);
       } catch (error) {
         console.warn("Firebase data load failed", error);
         setTrustedContacts([]);
-        setReports([]);
+        setReports(DEMO_MAP_REPORTS);
       }
     };
 
@@ -1976,11 +2028,11 @@ export default function App() {
     let cancelled = false;
     fetchNearbyFacilities(userLocation)
       .then((items) => {
-        if (!cancelled) setFacilities(items);
+        if (!cancelled) setFacilities(items.length ? items : DEMO_MAP_FACILITIES);
       })
       .catch((error) => {
         console.warn("Facility lookup failed", error);
-        if (!cancelled) setFacilities([]);
+        if (!cancelled) setFacilities(DEMO_MAP_FACILITIES);
       });
 
     return () => {
