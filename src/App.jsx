@@ -303,13 +303,14 @@ async function fetchRoutes(startCoords, destCoords, profile) {
       if (!detour) continue;
 
       const coordinates = detour.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      const duplicate = routes.some((route) =>
-        route.coordinates.some(
-          ([lat, lng], pointIndex) =>
-            Math.abs(lat - coordinates[pointIndex]?.[0]) < 0.0001 &&
-            Math.abs(lng - coordinates[pointIndex]?.[1]) < 0.0001
-        )
-      );
+      const detourMidpoint = coordinates[Math.floor(coordinates.length / 2)];
+      const duplicate = routes.some((route) => {
+        const routeMidpoint = route.coordinates[Math.floor(route.coordinates.length / 2)];
+        return (
+          Math.abs(routeMidpoint[0] - detourMidpoint[0]) < 0.0005 &&
+          Math.abs(routeMidpoint[1] - detourMidpoint[1]) < 0.0005
+        );
+      });
       if (duplicate) continue;
 
       routes.push({
