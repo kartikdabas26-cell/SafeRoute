@@ -26,7 +26,7 @@ import {
   Pill,
   LifeBuoy,
   UsersRound,
-  Accessibility,
+  Toilet,
   BadgeCheck,
   MessageCircle,
   Mic,
@@ -916,7 +916,7 @@ const facilityMarkerIcons = {
   Pharmacy: Pill,
   "Help Point": LifeBuoy,
   "Support Center": UsersRound,
-  Washroom: Accessibility,
+  Washroom: Toilet,
 };
 
 function mapMarkerIcon(Icon, color, className = "") {

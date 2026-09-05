@@ -44,6 +44,18 @@ const RouteComparisonCard = ({ route, isRecommended, isSelected, onSelect, onVie
             )}
             <h3 className="font-bold text-slate-900">{route.name}</h3>
           </div>
+          {!isSelected && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(route.id);
+              }}
+              className="mt-2 py-2 px-3 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition-all"
+            >
+              Select this route
+            </button>
+          )}
           <p className="text-xs text-slate-500">
             {route.distance} • {route.duration}
           </p>
@@ -173,19 +185,6 @@ const RouteComparisonCard = ({ route, isRecommended, isSelected, onSelect, onVie
             Full Analysis
           </button>
         </div>
-      )}
-
-      {!isSelected && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelect(route.id);
-          }}
-          className="w-full mt-3 py-2.5 px-3 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition-all"
-        >
-          Select this route
-        </button>
       )}
 
       {isSelected && (
