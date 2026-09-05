@@ -1,0 +1,11 @@
+Arrey yeh ni 
+Peeche ka tech samjhao
+Kiya kya jeez kisse connected hai kaise work karegi 
+
+
+For eg 
+Agar koi gunshot identification software bana ra hai 
+Toh 
+Sound wale ai ne gunshot detect kiya ...uske coordinates nikale
+Then sent it to the frontend...usne map per render kiya police ke dashboard per 
+Esa flowchart type batao

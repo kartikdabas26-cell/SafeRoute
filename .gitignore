@@ -11,6 +11,15 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+
+# Android build output
+android/.gradle
+android/**/build
+*.apk
+*.aab
 
 # Editor directories and files
 .vscode/*

@@ -1,5 +1,9 @@
 # React + Vite
 
+## Use your own Firebase project
+
+Copy `.env.example` to `.env` and replace every `your_*` value with the web app configuration from your Firebase project. Set `VITE_DEFAULT_EMERGENCY_EMAIL` to the emergency email that belongs to your project. The app uses demo mode until valid Firebase values are provided.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -1,1 +1,49 @@
 @import "tailwindcss";
+
+:root {
+  --z-content: 1;
+  --z-map: 10;
+  --z-floating: 100;
+  --z-navbar: 500;
+  --z-overlay: 1000;
+  --z-modal: 1100;
+  --z-critical: 2000;
+  color: #0f172a;
+  background: #f8fafc;
+  font-family: Inter, "Segoe UI", sans-serif;
+}
+
+html, body, #root {
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  color: #0f172a !important;
+  background-color: #ffffff;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b;
+}
+
+*:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}

@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isStudent() {
+      return signedIn() && userRole() == "Student/User";
+    }
+
+    function isGuardian() {
+      return signedIn() && userRole() == "Trusted Contact/Guardian";
+    }
+
+    function isPolice() {
+      return signedIn() && userRole() == "Police/Safety Officer";
+    }
+
+    function validRole(role) {
+      return role in ["Student/User", "Trusted Contact/Guardian", "Police/Safety Officer"];
+    }
+
+    function isOwnUserDoc(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow create: if isOwnUserDoc(userId)
+        && request.resource.data.uid == userId
+        && validRole(request.resource.data.role);
+      allow read: if signedIn();
+      allow update: if isOwnUserDoc(userId)
+        && resource.data.role == request.resource.data.role;
+      allow delete: if false;
+
+      match /trusted_contacts/{contactId} {
+        allow read, write: if isOwnUserDoc(userId)
+          || isGuardian()
+          || isPolice();
+      }
+
+      match /community_reports/{reportId} {
+        allow read: if signedIn();
+        allow create, update, delete: if isOwnUserDoc(userId) || isPolice();
+      }
+    }
+
+    match /trusted_contacts/{contactId} {
+      allow read: if signedIn();
+      allow create, update: if isStudent()
+        || isGuardian()
+        || isPolice();
+      allow delete: if signedIn()
+        && (resource.data.userId == request.auth.uid
+          || resource.data.studentUid == request.auth.uid
+          || resource.data.guardianUid == request.auth.uid
+          || isPolice());
+    }
+
+    match /community_reports/{reportId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && (request.resource.data.userId == request.auth.uid
+          || request.resource.data.uid == request.auth.uid);
+      allow update: if isPolice()
+        || resource.data.userId == request.auth.uid
+        || resource.data.uid == request.auth.uid;
+      allow delete: if isPolice()
+        || resource.data.userId == request.auth.uid
+        || resource.data.uid == request.auth.uid;
+    }
+
+    match /sos_events/{eventId} {
+      allow read: if isPolice()
+        || resource.data.uid == request.auth.uid
+        || request.auth.uid in resource.data.guardianUids;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if isPolice()
+        || isGuardian()
+        || resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /active_journeys/{studentUid} {
+      allow read: if isPolice()
+        || request.auth.uid == studentUid
+        || request.auth.uid in resource.data.guardianUids;
+      allow create, update: if isStudent()
+        && request.auth.uid == studentUid;
+      allow delete: if request.auth.uid == studentUid || isPolice();
+    }
+  }
+}

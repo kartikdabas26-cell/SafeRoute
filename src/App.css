@@ -182,3 +182,118 @@
     border-right-color: var(--border);
   }
 }
+
+.profile-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.profile-modal-card {
+  position: relative;
+  z-index: var(--z-modal);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.25);
+}
+
+.map-stack {
+  position: relative;
+  z-index: var(--z-map);
+  isolation: isolate;
+}
+
+.leaflet-control-locate {
+  width: 30px;
+  height: 30px;
+  line-height: 28px;
+  text-align: center;
+  background: #ffffff;
+  color: #0f766e;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-marker-host {
+  background: transparent;
+  border: 0;
+}
+
+.map-marker {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--marker-accent);
+  background: rgba(255, 255, 255, 0.97);
+  border: 2px solid var(--marker-accent);
+  border-radius: 11px;
+  box-shadow: 0 3px 9px rgba(15, 23, 42, 0.28);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.map-marker::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  width: 10px;
+  height: 10px;
+  background: #ffffff;
+  border-right: 2px solid var(--marker-accent);
+  border-bottom: 2px solid var(--marker-accent);
+  transform: rotate(45deg);
+  z-index: -1;
+}
+
+.map-marker-host:hover .map-marker {
+  transform: scale(1.12) translateY(-2px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.32);
+}
+
+.map-marker-report {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.map-marker-ai {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), 0 5px 14px rgba(37, 99, 235, 0.35);
+}
+
+.map-marker-location {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #0284c7;
+  border-color: #ffffff;
+  animation: location-pulse 2.4s ease-out infinite;
+}
+
+.map-marker-location::after {
+  background: #0284c7;
+  border-color: #ffffff;
+}
+
+.map-marker-destination {
+  color: #0f172a;
+  border-radius: 50% 50% 50% 10px;
+  transform: rotate(-45deg);
+}
+
+.map-marker-destination svg {
+  transform: rotate(45deg);
+}
+
+@keyframes location-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.35), 0 3px 9px rgba(15, 23, 42, 0.28); }
+  60% { box-shadow: 0 0 0 8px rgba(2, 132, 199, 0), 0 3px 9px rgba(15, 23, 42, 0.28); }
+}
+
+.leaflet-container {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
