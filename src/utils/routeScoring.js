@@ -52,6 +52,33 @@ export function minDistanceToRoute(routeCoords, point) {
 }
 
 /**
+ * Estimate how much two route paths overlap by sampling points on routeA
+ * and checking how close the nearest point on routeB is.
+ * Returns a ratio between 0 (completely distinct) and 1 (essentially identical).
+ * Used to detect "fake alternatives" - e.g. two OSRM routes, or a primary
+ * route and a synthetic detour, that actually follow almost the same roads.
+ * @param {Array<[number, number]>} routeACoords
+ * @param {Array<[number, number]>} routeBCoords
+ * @param {number} thresholdMeters - how close two points must be to count as "the same road"
+ * @returns {number} overlap ratio 0-1
+ */
+export function routeOverlapRatio(routeACoords, routeBCoords, thresholdMeters = 60) {
+  if (!routeACoords?.length || !routeBCoords?.length) return 0;
+
+  const step = Math.max(1, Math.floor(routeACoords.length / 60));
+  let sampled = 0;
+  let close = 0;
+
+  for (let i = 0; i < routeACoords.length; i += step) {
+    sampled += 1;
+    const distance = minDistanceToRoute(routeBCoords, routeACoords[i]);
+    if (distance <= thresholdMeters) close += 1;
+  }
+
+  return sampled ? close / sampled : 0;
+}
+
+/**
  * Calculate environmental safety component (lighting, hazards, etc.)
  * Based on nearby reports and their confidence
  */
@@ -255,12 +282,14 @@ export function scoreRoute(route, reports, facilities, weights = {}) {
 
   const riskLabel = getRiskLabel(finalScore);
 
-  // Generate explanation
+  // Generate explanation - quantitative and specific to THIS route's numbers,
+  // so two routes with different scores never end up showing identical text.
   const explanation = generateExplanation(
     route,
     reports,
     facilities,
-    components
+    components,
+    finalScore
   );
 
   return {
@@ -285,45 +314,103 @@ export function getRiskLabel(score) {
 }
 
 /**
- * Generate human-readable explanation for route score
+ * Generate human-readable explanation for route score.
+ *
+ * IMPORTANT: this used to only emit bucketed/categorical text ("Strong
+ * environmental safety signals", "Limited emergency support availability").
+ * Two routes that are close together geographically would land in the same
+ * bucket and produce byte-identical explanations even when their scores
+ * differed - because the score differences were coming from things this
+ * function never mentioned (exact component values, distance/duration vs.
+ * the fastest option, exact facility/report distances). This version always
+ * surfaces the actual numbers for THIS route, so the text reflects the score.
  */
-function generateExplanation(route, reports, facilities, components) {
+function generateExplanation(route, reports, facilities, components, finalScore) {
   const parts = [];
+  const distanceKm = route.distanceMeters / 1000;
+  const durationMin = route.durationSeconds / 60;
 
-  // Environmental findings
+  // Overall score, always first so it's obvious which route this text belongs to
+  parts.push(
+    `Overall safety score ${finalScore}/100 for ${route.name} (${distanceKm.toFixed(1)} km, ${Math.round(durationMin)} min)`
+  );
+
+  if (route.similarToPrimary) {
+    parts.push("⚠ This route shares most of its path with the primary route - a genuinely different alternative wasn't available for this trip");
+  }
+
+  // Environmental findings - now with the exact score, not just a bucket
   if (components.environmental >= 80) {
-    parts.push("✓ Strong environmental safety signals");
+    parts.push(`✓ Environmental safety ${components.environmental}/100 - strong signals along this path`);
   } else if (components.environmental >= 65) {
-    parts.push("~ Mixed environmental conditions");
+    parts.push(`~ Environmental safety ${components.environmental}/100 - mixed conditions along this path`);
   } else {
-    parts.push("⚠ Environmental concerns detected");
+    parts.push(`⚠ Environmental safety ${components.environmental}/100 - concerns detected along this path`);
   }
 
-  // Report analysis
-  const nearbyReports = reports.filter(
-    (r) => r.coords && minDistanceToRoute(route.coordinates, r.coords) <= 500
-  );
-  if (nearbyReports.length > 0) {
-    parts.push(`${nearbyReports.length} report(s) within route vicinity`);
-  }
+  // Report analysis - count AND distance to the closest one, since two
+  // routes can have the same count but very different proximity
+  const reportsWithDistance = reports
+    .filter((r) => r.coords)
+    .map((r) => ({ report: r, distance: minDistanceToRoute(route.coordinates, r.coords) }))
+    .filter(({ distance }) => distance <= 500)
+    .sort((a, b) => a.distance - b.distance);
 
-  // Facility analysis
-  const nearbyFacilities = facilities.filter(
-    (f) => minDistanceToRoute(route.coordinates, f.coords) <= 1000
-  );
-  if (nearbyFacilities.length > 0) {
-    parts.push(`${nearbyFacilities.length} support facility/facilities nearby`);
+  if (reportsWithDistance.length > 0) {
+    const closest = reportsWithDistance[0];
+    parts.push(
+      `${reportsWithDistance.length} report(s) within 500m - closest is "${closest.report.category || closest.report.title || "a report"}" about ${Math.round(closest.distance)}m from the path`
+    );
   } else {
-    parts.push("Limited emergency support availability");
+    parts.push("No community reports within 500m of this path");
   }
 
-  // Time context
+  // Facility analysis - nearest facility with name/category/distance
+  const facilitiesWithDistance = facilities
+    .filter((f) => f.coords)
+    .map((f) => ({ facility: f, distance: minDistanceToRoute(route.coordinates, f.coords) }))
+    .filter(({ distance }) => distance <= 1000)
+    .sort((a, b) => a.distance - b.distance);
+
+  if (facilitiesWithDistance.length > 0) {
+    const nearest = facilitiesWithDistance[0];
+    parts.push(
+      `${facilitiesWithDistance.length} support facility/facilities within 1km - nearest is ${nearest.facility.category || "a facility"} about ${Math.round(nearest.distance)}m away`
+    );
+  } else {
+    parts.push("Limited emergency support availability - no facilities within 1km");
+  }
+
+  // Efficiency vs. the fastest available option for this search
+  const fastestDistanceMeters = route.comparison?.fastestDistanceMeters;
+  const fastestDurationSeconds = route.comparison?.fastestDurationSeconds;
+  if (fastestDistanceMeters && fastestDurationSeconds) {
+    const extraDistanceM = route.distanceMeters - fastestDistanceMeters;
+    const extraDurationMin = (route.durationSeconds - fastestDurationSeconds) / 60;
+    if (extraDistanceM <= 5 && extraDurationMin <= 0.5) {
+      parts.push(`This is the fastest of the available options (${distanceKm.toFixed(1)} km, ${Math.round(durationMin)} min)`);
+    } else {
+      parts.push(
+        `About ${Math.round(extraDistanceM)}m longer and ${extraDurationMin.toFixed(1)} min slower than the fastest available option`
+      );
+    }
+  }
+
+  // Emergency accessibility, with the number
+  if (components.emergency >= 75) {
+    parts.push(`Emergency accessibility ${components.emergency}/100 - good access to help along this path`);
+  } else if (components.emergency < 55) {
+    parts.push(`Emergency accessibility ${components.emergency}/100 - sparse access to help along this path`);
+  }
+
+  // Time context (real-world, applies equally to all routes right now, but
+  // still worth surfacing since it factors into the score)
   const now = new Date();
   const hour = now.getHours();
   if (hour >= 22 || hour < 5) {
-    parts.push("Late-night routing increases caution factors");
+    parts.push(`Late-night routing (time score ${components.time}/100) increases caution factors`);
   } else if (hour >= 20 || hour < 7) {
-    parts.push("Evening/early morning: moderately increased caution");
+    parts.push(`Evening/early morning (time score ${components.time}/100): moderately increased caution`);
   }
 
   return parts;

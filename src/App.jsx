@@ -37,7 +37,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import "leaflet/dist/leaflet.css";
 
 // Import new utilities
-import { scoreRoute } from "./utils/routeScoring";
+import { scoreRoute, routeOverlapRatio } from "./utils/routeScoring";
 import { analyzeReportQuality, autoCategorizeReport } from "./utils/reportAnalysis";
 import { getFacilityStyle } from "./utils/facilityScoring";
 import {
@@ -254,6 +254,123 @@ async function geocodePlace(query, fallbackCenter) {
   }
 }
 
+// How close (as a fraction of sampled points, 0-1) two route paths can be
+// before we treat the "alternative" as a fake/duplicate of the primary route.
+// OSRM will sometimes return two "alternatives" that use almost the same
+// roads (especially in dense grids or small areas) - if we let that through,
+// the two routes end up with near-identical safety analyses but slightly
+// different scores (from rounding of distance/duration), which looks like a
+// bug even though the score itself is technically "correct".
+const ROUTE_DUPLICATE_OVERLAP_THRESHOLD = 0.75;
+
+function bearingBetween([lat1, lon1], [lat2, lon2]) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  return (bearing + 360) % 360;
+}
+
+// Offset a [lat, lon] point by `distanceMeters` along compass `bearingDeg`.
+function offsetPoint([lat, lon], bearingDeg, distanceMeters) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const toDeg = (rad) => (rad * 180) / Math.PI;
+  const brng = toRad(bearingDeg);
+  const lat1 = toRad(lat);
+  const lon1 = toRad(lon);
+  const angularDistance = distanceMeters / R;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(brng)
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+  return [toDeg(lat2), toDeg(lon2)];
+}
+
+async function requestOsrmRoute(startCoords, waypoint, destCoords, profile) {
+  const points = waypoint
+    ? [startCoords, waypoint, destCoords]
+    : [startCoords, destCoords];
+  const coordString = points.map(([lat, lng]) => `${lng},${lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coordString}?overview=full&geometries=geojson&steps=false`;
+
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  const route = data.routes?.[0];
+  if (!route) return null;
+
+  return {
+    distanceMeters: route.distance,
+    durationSeconds: route.duration,
+    coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+  };
+}
+
+function toRouteEntry(id, name, raw) {
+  return {
+    id,
+    name,
+    distance: `${(raw.distanceMeters / 1000).toFixed(1)} km`,
+    distanceMeters: raw.distanceMeters,
+    duration: `${Math.ceil(raw.durationSeconds / 60)} mins`,
+    durationSeconds: raw.durationSeconds,
+    coordinates: raw.coordinates,
+  };
+}
+
+// Try a handful of waypoints offset perpendicular to the start->destination
+// bearing (both left and right, at increasing distances) until we find a
+// candidate route that is genuinely distinct from the primary route rather
+// than a near-duplicate that just snaps back to the same roads.
+async function findDistinctAlternative(startCoords, destCoords, profile, primary) {
+  const overallBearing = bearingBetween(primary.coordinates[0], primary.coordinates[primary.coordinates.length - 1]);
+  const perpendicular = (overallBearing + 90) % 360;
+  const midpoint = primary.coordinates[Math.floor(primary.coordinates.length / 2)];
+
+  const candidateOffsets = [350, 600, 900, 1300].flatMap((distance) => [
+    { bearing: perpendicular, distance },
+    { bearing: (perpendicular + 180) % 360, distance },
+  ]);
+
+  let best = null;
+  let bestOverlap = 1;
+
+  for (const { bearing, distance } of candidateOffsets) {
+    const waypoint = offsetPoint(midpoint, bearing, distance);
+
+    try {
+      const candidate = await requestOsrmRoute(startCoords, waypoint, destCoords, profile);
+      if (!candidate) continue;
+
+      const overlap = routeOverlapRatio(candidate.coordinates, primary.coordinates);
+
+      if (overlap < bestOverlap) {
+        bestOverlap = overlap;
+        best = candidate;
+      }
+
+      // Good enough - genuinely different path, stop searching early.
+      if (overlap < ROUTE_DUPLICATE_OVERLAP_THRESHOLD - 0.15) break;
+    } catch (error) {
+      console.warn("Alternative route lookup failed", error);
+    }
+  }
+
+  return { candidate: best, overlap: bestOverlap };
+}
+
 async function fetchRoutes(startCoords, destCoords, profile) {
   const base = `https://router.project-osrm.org/route/v1/${profile}/${startCoords[1]},${startCoords[0]};${destCoords[1]},${destCoords[0]}`;
   const url = `${base}?alternatives=true&overview=full&geometries=geojson&steps=false`;
@@ -268,66 +385,49 @@ async function fetchRoutes(startCoords, destCoords, profile) {
     throw new Error(data.message || "No route was returned");
   }
 
-  const routes = data.routes.map((route, index) => ({
-    id: `route-${index + 1}`,
-    name: index === 0 ? "Primary route" : `Alternative route ${index}`,
-    distance: `${(route.distance / 1000).toFixed(1)} km`,
+  const rawRoutes = data.routes.map((route) => ({
     distanceMeters: route.distance,
-    duration: `${Math.ceil(route.duration / 60)} mins`,
     durationSeconds: route.duration,
     coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
   }));
 
-  if (routes.length >= 2) return routes.slice(0, 2);
+  const primary = toRouteEntry("route-1", "Primary route", rawRoutes[0]);
+  const routes = [primary];
 
-  const primary = routes[0];
-  const midpoint = primary.coordinates[Math.floor(primary.coordinates.length / 2)];
-  const latitudeOffset = 0.006;
-  const detourCandidates = [
-    [midpoint[0] + latitudeOffset, midpoint[1]],
-    [midpoint[0] - latitudeOffset, midpoint[1]],
-  ];
-
-  for (const [index, [latitude, longitude]] of detourCandidates.entries()) {
-    if (routes.length >= 2) break;
-
-    try {
-      const detourBase = `https://router.project-osrm.org/route/v1/${profile}/${startCoords[1]},${startCoords[0]};${longitude},${latitude};${destCoords[1]},${destCoords[0]}`;
-      const detourResponse = await fetch(
-        `${detourBase}?overview=full&geometries=geojson&steps=false`
-      );
-      if (!detourResponse.ok) continue;
-
-      const detourData = await detourResponse.json();
-      const detour = detourData.routes?.[0];
-      if (!detour) continue;
-
-      const coordinates = detour.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      const detourMidpoint = coordinates[Math.floor(coordinates.length / 2)];
-      const duplicate = routes.some((route) => {
-        const routeMidpoint = route.coordinates[Math.floor(route.coordinates.length / 2)];
-        return (
-          Math.abs(routeMidpoint[0] - detourMidpoint[0]) < 0.0005 &&
-          Math.abs(routeMidpoint[1] - detourMidpoint[1]) < 0.0005
-        );
-      });
-      if (duplicate) continue;
-
-      routes.push({
-        id: `route-${routes.length + 1}`,
-        name: `Alternative route ${index + 1}`,
-        distance: `${(detour.distance / 1000).toFixed(1)} km`,
-        distanceMeters: detour.distance,
-        duration: `${Math.ceil(detour.duration / 60)} mins`,
-        durationSeconds: detour.duration,
-        coordinates,
-      });
-    } catch (error) {
-      console.warn("Alternative route lookup failed", error);
-    }
+  // Does OSRM's own "alternative" actually go a different way, or is it a
+  // near-duplicate of the primary route (same roads, marginally different
+  // distance/duration)? Either way, if it's not distinct enough, look for a
+  // genuinely different path ourselves instead of showing a fake second option.
+  let osrmAlternativeIsDistinct = false;
+  if (rawRoutes.length >= 2) {
+    const overlap = routeOverlapRatio(rawRoutes[1].coordinates, primary.coordinates);
+    osrmAlternativeIsDistinct = overlap < ROUTE_DUPLICATE_OVERLAP_THRESHOLD;
   }
 
-  return routes.slice(0, 2);
+  if (osrmAlternativeIsDistinct) {
+    routes.push(toRouteEntry("route-2", "Alternative route", rawRoutes[1]));
+    return routes;
+  }
+
+  const { candidate, overlap } = await findDistinctAlternative(startCoords, destCoords, profile, primary);
+
+  if (candidate) {
+    routes.push({
+      ...toRouteEntry("route-2", "Alternative route", candidate),
+      // Surfaced in the UI/explanation so users aren't confused if the best
+      // we could find still shares most of the path with the primary route.
+      similarToPrimary: overlap >= ROUTE_DUPLICATE_OVERLAP_THRESHOLD,
+    });
+  } else if (rawRoutes.length >= 2) {
+    // Nothing better was found - fall back to OSRM's own alternative rather
+    // than showing only one route, but flag it so the UI can be honest about it.
+    routes.push({
+      ...toRouteEntry("route-2", "Alternative route", rawRoutes[1]),
+      similarToPrimary: true,
+    });
+  }
+
+  return routes;
 }
 
 async function fetchNearbyFacilities(location) {
@@ -785,14 +885,16 @@ function MapView({
       return layer;
     };
 
-    const routeData = routes.map((route) => ({
-          ...route,
-          pane: route.id === selectedRouteId ? "primaryRoute" : "alternateRoute",
-          color: route.id === selectedRouteId ? "#10b981" : route.score >= 65 ? "#f59e0b" : "#ef4444",
-          weight: route.id === selectedRouteId ? 7 : 4,
-          opacity: route.id === selectedRouteId ? 0.9 : 0.6,
-          dashArray: route.id === selectedRouteId ? undefined : "8 8",
-        }));
+    const routeData = [...routes]
+      .sort((a, b) => Number(b.id === selectedRouteId) - Number(a.id === selectedRouteId))
+      .map((route) => ({
+        ...route,
+        pane: route.id === selectedRouteId ? "primaryRoute" : "alternateRoute",
+        color: route.id === selectedRouteId ? "#10b981" : route.score >= 65 ? "#f59e0b" : "#ef4444",
+        weight: route.id === selectedRouteId ? 8 : 4,
+        opacity: route.id === selectedRouteId ? 0.95 : 0.6,
+        dashArray: route.id === selectedRouteId ? undefined : "8 8",
+      }));
 
     routeData.forEach((route) => {
       if (route.id !== selectedRouteId && layerVisibility.alternateRoute === false) return;
@@ -804,6 +906,15 @@ function MapView({
         pane: route.pane,
       }).bindPopup(`<b>${route.name}</b><br/>${route.distance} • ${route.duration}<br/>Safety: ${route.score}/100`));
     });
+
+    const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+    if (selectedRoute?.coordinates?.length) {
+      mapRef.current.fitBounds(L.latLngBounds(selectedRoute.coordinates), {
+        padding: [24, 24],
+        maxZoom: 15,
+        animate: true,
+      });
+    }
     const reportData = reports.filter((report) => (report.moderation?.status || "approved") === "approved");
     const averageVotes = reportData.length
       ? reportData.reduce((total, report) => total + Number(report.upvotes || 0), 0) / reportData.length
