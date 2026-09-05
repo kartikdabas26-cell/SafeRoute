@@ -282,6 +282,16 @@ export function scoreRoute(route, reports, facilities, weights = {}) {
 
   const riskLabel = getRiskLabel(finalScore);
 
+  // Real counts (not scores) for quick-glance UI - e.g. RouteComparisonCard's
+  // "Reports" / "Facilities" summary previously showed the community/emergency
+  // *scores* mislabeled as counts. These give it something accurate to show.
+  const nearbyReportCount = reports.filter(
+    (r) => r.coords && minDistanceToRoute(route.coordinates, r.coords) <= 500
+  ).length;
+  const nearbyFacilityCount = facilities.filter(
+    (f) => f.coords && minDistanceToRoute(route.coordinates, f.coords) <= 1000
+  ).length;
+
   // Generate explanation - quantitative and specific to THIS route's numbers,
   // so two routes with different scores never end up showing identical text.
   const explanation = generateExplanation(
@@ -300,6 +310,8 @@ export function scoreRoute(route, reports, facilities, weights = {}) {
     components,
     weights: finalWeights,
     explanation,
+    nearbyReportCount,
+    nearbyFacilityCount,
   };
 }
 
@@ -337,6 +349,24 @@ function generateExplanation(route, reports, facilities, components, finalScore)
 
   if (route.similarToPrimary) {
     parts.push("⚠ This route shares most of its path with the primary route - a genuinely different alternative wasn't available for this trip");
+  }
+
+  // Efficiency vs. the fastest available option for this search - placed
+  // early (right after the score line) because this is usually the biggest
+  // differentiator between routes that otherwise look similar, and it needs
+  // to survive being truncated to the first few lines in compact UI cards.
+  const fastestDistanceMeters = route.comparison?.fastestDistanceMeters;
+  const fastestDurationSeconds = route.comparison?.fastestDurationSeconds;
+  if (fastestDistanceMeters && fastestDurationSeconds) {
+    const extraDistanceM = route.distanceMeters - fastestDistanceMeters;
+    const extraDurationMin = (route.durationSeconds - fastestDurationSeconds) / 60;
+    if (extraDistanceM <= 5 && extraDurationMin <= 0.5) {
+      parts.push(`This is the fastest of the available options (${distanceKm.toFixed(1)} km, ${Math.round(durationMin)} min)`);
+    } else {
+      parts.push(
+        `About ${Math.round(extraDistanceM)}m longer and ${extraDurationMin.toFixed(1)} min slower than the fastest available option`
+      );
+    }
   }
 
   // Environmental findings - now with the exact score, not just a bucket
@@ -379,21 +409,6 @@ function generateExplanation(route, reports, facilities, components, finalScore)
     );
   } else {
     parts.push("Limited emergency support availability - no facilities within 1km");
-  }
-
-  // Efficiency vs. the fastest available option for this search
-  const fastestDistanceMeters = route.comparison?.fastestDistanceMeters;
-  const fastestDurationSeconds = route.comparison?.fastestDurationSeconds;
-  if (fastestDistanceMeters && fastestDurationSeconds) {
-    const extraDistanceM = route.distanceMeters - fastestDistanceMeters;
-    const extraDurationMin = (route.durationSeconds - fastestDurationSeconds) / 60;
-    if (extraDistanceM <= 5 && extraDurationMin <= 0.5) {
-      parts.push(`This is the fastest of the available options (${distanceKm.toFixed(1)} km, ${Math.round(durationMin)} min)`);
-    } else {
-      parts.push(
-        `About ${Math.round(extraDistanceM)}m longer and ${extraDurationMin.toFixed(1)} min slower than the fastest available option`
-      );
-    }
   }
 
   // Emergency accessibility, with the number
