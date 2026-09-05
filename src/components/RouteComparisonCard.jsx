@@ -175,6 +175,19 @@ const RouteComparisonCard = ({ route, isRecommended, isSelected, onSelect, onVie
         </div>
       )}
 
+      {!isSelected && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect(route.id);
+          }}
+          className="w-full mt-3 py-2.5 px-3 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition-all"
+        >
+          Select this route
+        </button>
+      )}
+
       {isSelected && (
         <div className="mt-4 flex items-center gap-2 p-3 bg-sky-100 rounded-2xl">
           <Check className="w-4 h-4 text-sky-700" />

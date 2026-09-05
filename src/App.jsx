@@ -278,7 +278,7 @@ async function fetchRoutes(startCoords, destCoords, profile) {
     coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
   }));
 
-  if (routes.length >= 3) return routes;
+  if (routes.length >= 2) return routes.slice(0, 2);
 
   const primary = routes[0];
   const midpoint = primary.coordinates[Math.floor(primary.coordinates.length / 2)];
@@ -289,7 +289,7 @@ async function fetchRoutes(startCoords, destCoords, profile) {
   ];
 
   for (const [index, [latitude, longitude]] of detourCandidates.entries()) {
-    if (routes.length >= 3) break;
+    if (routes.length >= 2) break;
 
     try {
       const detourBase = `https://router.project-osrm.org/route/v1/${profile}/${startCoords[1]},${startCoords[0]};${longitude},${latitude};${destCoords[1]},${destCoords[0]}`;
@@ -327,7 +327,7 @@ async function fetchRoutes(startCoords, destCoords, profile) {
     }
   }
 
-  return routes;
+  return routes.slice(0, 2);
 }
 
 async function fetchNearbyFacilities(location) {
